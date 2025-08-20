@@ -1,77 +1,2716 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Free Weather App</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            background: linear-gradient(to bottom, #87ceeb, #f0f8ff);
-            margin: 0;
-            padding: 20px;
-        }
-        input {
-            padding: 10px;
-            font-size: 16px;
-        }
-        button {
-            padding: 10px 15px;
-            font-size: 16px;
-            cursor: pointer;
-        }
-        #weather {
-            margin-top: 20px;
-            font-size: 18px;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Weather + City Alerts (Free APIs)</title>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Leaflet (Map) -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <style>
+    :root{
+      --bg:#0b1221; --panel:#0f172a; --card:#111827; --border:#1f2937; --text:#e5e7eb;
+      --muted:#94a3b8; --accent:#38bdf8; --ok:#34d399; --warn:#f59e0b; --bad:#ef4444;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family:system-ui,Segoe UI,Inter,Roboto,Helvetica,Arial,sans-serif;
+      color:var(--text);
+      background: radial-gradient(1000px 700px at 0% -10%, #1e293b55, transparent),
+                  linear-gradient(160deg, #0b1221, #0f172a 60%);
+      min-height:100svh; display:flex; flex-direction:column;
+      transition: background 0.3s ease;
+    }
+    body:hover{background: radial-gradient(1000px 700px at 0% -10%, #1e293b77, transparent),
+                linear-gradient(160deg, #0b1221, #0f172a 70%);}
+    header{
+      position:sticky; top:0; z-index:10;
+      display:flex; gap:12px; align-items:center; justify-content:space-between;
+      padding:14px 16px; background:#0f172acc; backdrop-filter:saturate(1.2) blur(8px);
+      border-bottom:1px solid var(--border);
+      transition: all 0.2s ease;
+    }
+    header:hover{background:#0f172aee; backdrop-filter:saturate(1.4) blur(12px);}
+    .brand{font-weight:800; letter-spacing:.2px; display:flex; align-items:center; gap:10px; transition: transform 0.2s ease;}
+    .brand:hover{transform: scale(1.05);}
+    .brand:active{transform: scale(0.95);}
+    .dot{width:10px;height:10px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#22d3ee,#38bdf8); animation: pulse 2s infinite;}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.7}}
+    .searchwrap{position:relative; width:100%; max-width:760px; display:flex; gap:8px; transition: transform 0.2s ease;}
+    .searchwrap:focus-within{transform: scale(1.02);}
+    .searchwrap:active{transform: scale(0.98);}
+    input[type="text"]{
+      flex:1; padding:12px 14px; border-radius:14px; border:1px solid var(--border);
+      background:#0b1221; color:var(--text); font-size:16px; outline:none;
+      transition: all 0.2s ease;
+    }
+    input[type="text"]:focus{
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
+      transform: scale(1.01);
+    }
+    input[type="text"]::placeholder{
+      color: var(--muted);
+      opacity: 0.7;
+    }
+    button{
+      padding:12px 14px; border-radius:14px; border:1px solid var(--border);
+      background:#0b1221; color:var(--text); font-weight:700; cursor:pointer;
+      transition: all 0.2s ease; position: relative; overflow: hidden;
+      transform: translateY(0);
+    }
+    button:hover{
+      border-color:#334155; background:#0f172a; transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    button:active{transform: translateY(1px);}
+    button:disabled{
+      opacity: 0.6; cursor: not-allowed; transform: none;
+    }
+    .locBtn{background: linear-gradient(135deg, #38bdf8, #0ea5e9); border-color: #38bdf8; color: white;}
+    .locBtn:hover{background: linear-gradient(135deg, #0ea5e9, #0284c7);}
+    .locBtn:disabled{background: linear-gradient(135deg, #64748b, #475569);}
+    
+    .suggest{position:absolute; top:48px; left:0; right:0; background:#0b1221; border:1px solid var(--border);
+      border-radius:12px; overflow:hidden; display:none; max-height:300px; overflow-y:auto;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3); z-index: 1000;
+      transition: all 0.3s ease; transform: translateY(-10px); opacity: 0;}
+    .suggest[style*="block"]{transform: translateY(0); opacity: 1;}
+    .suggest div{padding:10px 12px; border-bottom:1px solid #111827; cursor:pointer; transition: all 0.2s ease;}
+    .suggest div:hover{background:#0f172a; transform: translateX(4px);}
+    .suggest div:last-child{border-bottom: none;}
+    .suggest div:active{transform: translateX(2px) translateY(1px);}
+    
+    main{padding:18px 16px; max-width:1200px; margin:0 auto; width:100%; transition: padding 0.2s ease;}
+    main:hover{padding: 20px 18px;}
+    main:active{padding: 19px 17px;}
+    .grid{display:grid; gap:16px; grid-template-columns:1fr; transition: gap 0.2s ease;}
+    .grid:hover{gap: 18px;}
+    .grid:active{gap: 17px;}
+    @media (min-width:1000px){ .grid{ grid-template-columns:1.2fr .8fr } }
+    .card{background:linear-gradient(180deg,#111827,#0f172a); border:1px solid var(--border); border-radius:18px; padding:16px;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;}
+    .card:hover{transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.3);}
+    .card:active{transform: translateY(1px);}
+    .title{font-size:12px;color:var(--muted);letter-spacing:.2em;text-transform:uppercase;margin-bottom:8px; transition: color 0.2s ease;}
+    .title:hover{color: var(--accent);}
+    .current{display:grid;grid-template-columns:auto 1fr; gap:16px; align-items:center; transition: gap 0.2s ease;}
+    .current:hover{gap: 18px;}
+    .current:active{gap: 17px;}
+    .big{font-size:54px; font-weight:800; line-height:1; background:linear-gradient(90deg,#fff,#cbd5e1);
+      -webkit-background-clip:text; color:transparent; transition: transform 0.2s ease;}
+    .big:hover{transform: scale(1.05);}
+    .big:active{transform: scale(0.95);}
+    .pill{padding:8px 10px;background:#0b1221;border:1px solid var(--border);border-radius:12px;font-size:14px;
+      transition: all 0.2s ease;}
+    .pill:hover{background:#0f172a; border-color: #334155; transform: translateY(-1px);}
+    .pill:active{transform: translateY(1px);}
+    .row{display:flex; gap:10px; flex-wrap:wrap; transition: gap 0.2s ease;}
+    .row:hover{gap: 12px;}
+    .row:active{gap: 11px;}
+    
+    /* Forecast grid */
+    .forecast{display:grid; gap:14px; grid-template-columns:repeat(2,1fr); transition: gap 0.2s ease;}
+    .forecast:hover{gap: 16px;}
+    .forecast:active{gap: 15px;}
+    @media (min-width:600px){ .forecast{ grid-template-columns:repeat(5,1fr) } }
+    
+    /* 3D card base */
+    .day3d{
+      position:relative; perspective:800px; transform-style:preserve-3d;
+      transition: transform 0.2s ease;
+    }
+    .day3d:hover{transform: scale(1.02);}
+    .day3d:active{transform: scale(0.98);}
+    .day{
+      background:#0b1221; border:1px solid var(--border); border-radius:14px; padding:14px; text-align:center;
+      transition: transform 90ms ease, box-shadow 90ms ease, border-color 0.2s ease;
+      transform: rotateX(0deg) rotateY(0deg);
+      transform-style:preserve-3d;
+      box-shadow: 0 8px 18px rgba(0,0,0,0.25);
+    }
+    .day:hover{border-color: var(--accent);}
+    .emoji{font-size:34px; transform: translateZ(12px); transition: transform 0.2s ease; } /* subtle pop */
+    .emoji:hover{transform: translateZ(12px) scale(1.1);}
+    .emoji:active{transform: translateZ(12px) scale(0.9);}
+    #map{height:380px; border-radius:14px; border:1px solid var(--border); overflow:hidden; transition: border-color 0.2s ease;}
+    #map:hover{border-color: var(--accent);}
+    .list{display:grid; gap:10px; transition: gap 0.2s ease;}
+    .list:hover{gap: 12px;}
+    .item{background:#0b1221;border:1px solid var(--border);border-radius:12px;padding:10px;
+      transition: all 0.2s ease;}
+    .item:hover{background:#0f172a; border-color: #334155; transform: translateX(4px);}
+    .item:active{transform: translateX(2px) translateY(1px);}
+    .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+    .tag{display:inline-block; padding:2px 6px; font-size:12px; border-radius:999px; border:1px solid var(--border); margin-left:8px; transition: all 0.2s ease;}
+    .tag:hover{transform: scale(1.1);}
+    .tag:active{transform: scale(0.9);}
+    .tag.blue{border-color:#38bdf8}
+    .tag.blue:hover{border-color: #22d3ee; background: rgba(56, 189, 248, 0.1);}
+    footer{color:#64748b; font-size:12px; text-align:center; padding:18px; transition: opacity 0.2s ease;}
+    footer:hover{opacity: 0.8;}
+    .hint{font-size:12px; color:var(--muted); margin-top:8px}
+    
+    /* Loading states */
+    .loading{opacity: 0.6; pointer-events: none;}
+    .spinner{display: inline-block; width: 16px; height: 16px; border: 2px solid transparent; border-top: 2px solid currentColor; border-radius: 50%; animation: spin 1s linear infinite;}
+    @keyframes spin{0%{transform: rotate(0deg)}100%{transform: rotate(360deg)}}
+    
+    /* News refresh button animation */
+    #refreshNews:disabled {
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+    
+    #refreshNews:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(56, 189, 248, 0.3);
+    }
+    
+    /* Toast notifications */
+    .toast{position: fixed; top: 20px; right: 20px; background: #111827; border: 1px solid var(--border); border-radius: 12px; padding: 16px; z-index: 10000; transform: translateX(400px); transition: transform 0.3s ease; max-width: 300px;}
+    .toast.show{transform: translateX(0);}
+    .toast.success{border-left: 4px solid var(--ok);}
+    .toast.error{border-left: 4px solid var(--bad);}
+    .toast.warning{border-left: 4px solid var(--warn);}
+    
+    /* Responsive improvements */
+    @media (max-width: 768px) {
+      header{flex-direction: column; gap: 16px; align-items: stretch;}
+      .searchwrap{flex-direction: column;}
+      .current{grid-template-columns: 1fr; text-align: center;}
+      .big{font-size: 42px;}
+      .forecast{grid-template-columns: repeat(3, 1fr);}
+    }
+    
+    /* Weather alerts styling */
+    .alert-item{background: linear-gradient(135deg, #dc2626, #991b1b); border: 1px solid #dc2626; color: white;}
+    .alert-item.warning{background: linear-gradient(135deg, #d97706, #92400e); border-color: #d97706;}
+    .alert-item.info{background: linear-gradient(135deg, #2563eb, #1d4ed8); border-color: #2563eb;}
+    
+    /* Enhanced search results */
+    .search-result{display: flex; align-items: center; gap: 12px; padding: 12px;}
+    .search-result .location-icon{width: 20px; height: 20px; background: var(--accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px;}
+    
+    /* Disaster tip buttons */
+    .disaster-tip-btn{
+      padding: 8px 16px; border-radius: 12px; border: 1px solid var(--border);
+      background: #0b1221; color: var(--text); font-weight: 600; cursor: pointer;
+      transition: all 0.2s ease; font-size: 14px;
+    }
+    .disaster-tip-btn:hover{
+      background: #0f172a; border-color: var(--accent); transform: translateY(-1px);
+    }
+    .disaster-tip-btn.active{
+      background: linear-gradient(135deg, #38bdf8, #0ea5e9); border-color: #38bdf8; color: white;
+    }
+    .disaster-tip-btn.active:hover{
+      background: linear-gradient(135deg, #0ea5e9, #0284c7);
+    }
+    
+    /* Tip content transitions */
+    .tip-content{
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+    
+    /* News feed item enhancements */
+    .news-item{
+      transition: all 0.2s ease;
+    }
+    .news-item:hover{
+      transform: translateX(4px);
+      background: #0f172a;
+    }
+    
+    /* Refresh button hover effect */
+    #refreshNews:hover{
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(56, 189, 248, 0.3);
+    }
+    
+    /* News modal styles */
+    .news-modal{
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8);
+      display: none; z-index: 10000; backdrop-filter: blur(8px);
+      opacity: 0; transition: opacity 0.3s ease;
+    }
+    .news-modal.show{opacity: 1;}
+    .news-modal-content{
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.9);
+      background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+      max-width: 90vw; max-height: 90vh; overflow-y: auto; padding: 24px;
+      transition: transform 0.3s ease; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    .news-modal.show .news-modal-content{transform: translate(-50%, -50%) scale(1);}
+    .news-modal-header{
+      display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;
+      padding-bottom: 16px; border-bottom: 1px solid var(--border);
+    }
+    .news-modal-title{font-size: 24px; font-weight: 800; line-height: 1.3; margin-bottom: 8px;}
+    .news-modal-meta{color: var(--muted); font-size: 14px; margin-bottom: 16px;}
+    .news-modal-body{line-height: 1.7; color: var(--text);}
+    .news-modal-close{
+      background: none; border: none; color: var(--muted); font-size: 24px; cursor: pointer;
+      padding: 8px; border-radius: 8px; transition: all 0.2s ease;
+    }
+    .news-modal-close:hover{color: var(--text); background: rgba(255,255,255,0.1);}
+    
+    /* Make news items clickable */
+    .news-item{cursor: pointer; transition: all 0.2s ease;}
+    .news-item:hover{transform: translateX(4px); background: #0f172a; border-color: var(--accent);}
+    
+    /* News tags in modal */
+    .news-modal-tags{display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0;}
+    .news-modal-tag{
+      padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+      border: 1px solid var(--border); background: rgba(56, 189, 248, 0.1);
+      color: var(--accent);
+    }
+    
+    /* News source section */
+    .news-modal-source{
+      margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border);
+      text-align: center;
+    }
+    .news-modal-source a{
+      display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px;
+      background: linear-gradient(135deg, #38bdf8, #0ea5e9); color: white;
+      text-decoration: none; border-radius: 12px; font-weight: 600; transition: all 0.2s ease;
+    }
+    .news-modal-source a:hover{
+      transform: translateY(-2px); box-shadow: 0 8px 25px rgba(56, 189, 248, 0.3);
+    }
+    .news-modal-source .source-info{
+      color: var(--muted); font-size: 14px; margin-bottom: 12px;
+    }
+    
+    /* News controls styling */
+    #newsControls .pill, #newsControls select, #newsControls input[type="text"]{
+      background:#0b1221; border:1px solid var(--border); color:var(--text); border-radius:12px; padding:8px 12px; font-size:14px;
+    }
+    #newsControls select{
+      appearance: none; -webkit-appearance: none; -moz-appearance: none;
+      background: linear-gradient(180deg,#111827,#0f172a);
+      border-color:#334155; cursor:pointer;
+    }
+    #newsControls select:focus, #newsControls input[type="text"]:focus{
+      outline:none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(56,189,248,0.1);
+    }
+    #newsControls #applyNewsFilter{
+      background: linear-gradient(135deg, #38bdf8, #0ea5e9); border-color: #38bdf8; color: white; font-weight:700;
+    }
+    #newsControls #applyNewsFilter:hover{ background: linear-gradient(135deg, #0ea5e9, #0284c7); }
+  </style>
 </head>
 <body>
-    <h1>Free Weather App</h1>
-    <input type="text" id="city" placeholder="Enter city name">
-    <button onclick="getWeather()">Get Weather</button>
-    <div id="weather"></div>
+  <header>
+    <div class="brand"><span class="dot"></span> Weather + City Alerts</div>
+    <div class="searchwrap">
+      <input id="search" type="text" placeholder="🔍 Search city (e.g., Mumbai, London, Tokyo)" autocomplete="off" />
+      <button id="locBtn" title="Get weather for your current location">
+        <span id="locBtnText">📍 Use My Location</span>
+        <span id="locBtnSpinner" class="spinner" style="display: none;"></span>
+      </button>
+      <div id="suggest" class="suggest"></div>
+    </div>
+  </header>
 
-    <script>
-        async function getWeather() {
-            const city = document.getElementById("city").value;
-            if (!city) {
-                document.getElementById("weather").innerHTML = "Please enter a city name.";
-                return;
-            }
+  <main>
+    <div class="grid">
+      <section class="card">
+        <div class="title">Current Weather</div>
+        <div class="current">
+          <div id="icon" class="emoji">⛅</div>
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+              <div id="place" style="font-size:20px; font-weight:800">—</div>
+              <div id="time" style="color:var(--muted); font-size:14px">—</div>
+            </div>
+            <div class="row" style="align-items:flex-end; margin:6px 0 10px">
+              <div class="big" id="temp">—°C</div>
+              <div><div id="desc">—</div></div>
+            </div>
+            <div class="row">
+              <div class="pill" id="feels">Feels like —°C</div>
+              <div class="pill" id="humidity">Humidity —%</div>
+              <div class="pill" id="wind">Wind — km/h</div>
+              <div class="pill" id="sun">Sunrise — / Sunset —</div>
+              <div class="pill" id="aqi">Air: —</div>
+            </div>
+            <div class="hint">💡 Tip: "Use My Location" works on HTTPS or localhost. Allow location access when prompted.</div>
+          </div>
+        </div>
+      </section>
 
-            try {
-                // 1. Convert city name to coordinates using Nominatim API (OpenStreetMap)
-                const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?city=${city}&format=json`);
-                const geoData = await geoRes.json();
+      <section class="card">
+        <div class="title">5-Day Forecast</div>
+        <div id="forecast" class="forecast"></div>
+      </section>
+    </div>
 
-                if (geoData.length === 0) {
-                    document.getElementById("weather").innerHTML = "City not found!";
-                    return;
-                }
+    <section class="card">
+      <div class="title">24-Hour Temperature Trend</div>
+      <canvas id="tempChart" height="120" style="transition: opacity 0.3s ease;"></canvas>
+    </section>
 
-                const lat = geoData[0].lat;
-                const lon = geoData[0].lon;
+    <section class="card">
+      <div class="title">Interactive Map</div>
+      <div id="map"></div>
+    </section>
 
-                // 2. Fetch weather from MET Norway API
-                const url = `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat}&lon=${lon}`;
-                const weatherRes = await fetch(url, {
-                    headers: { "User-Agent": "YourNameHere/1.0" } // Replace with your name
-                });
-                const weatherData = await weatherRes.json();
+    <div class="grid" style="margin-top:16px">
+      <section class="card">
+        <div class="title">🌋 Recent Earthquakes (≤7 days)</div>
+        <div id="quakes" class="list"></div>
+      </section>
+      <section class="card">
+        <div class="title">⚠️ Active Alerts (Floods, Storms, Wildfires)</div>
+        <div id="eonet" class="list"></div>
+      </section>
+    </div>
 
-                const temp = weatherData.properties.timeseries[0].data.instant.details.air_temperature;
-                const condition = weatherData.properties.timeseries[0].data.next_1_hours?.summary.symbol_code || "unknown";
+    <!-- Weather & Disaster News Feed Section -->
+    <section class="card" style="margin-top:16px">
+      <div class="title">📰 Weather & Disaster News Feed</div>
+      <div id="newsControls" class="row" style="margin-bottom:12px; align-items:center;">
+        <select id="newsMode" class="pill">
+          <option value="auto">Auto (selected city)</option>
+          <option value="country">Country</option>
+          <option value="city">City</option>
+          <option value="global">Global</option>
+        </select>
+        <input id="newsQuery" type="text" placeholder="Enter country (e.g., India) or city (e.g., Tokyo)" style="flex:1; min-width:200px; display:none;" />
+        <button id="applyNewsFilter" class="pill">Apply</button>
+        <button id="quickRefreshNews" class="pill" style="background: linear-gradient(135deg, #38bdf8, #0ea5e9); border-color: #38bdf8; color: white; font-weight:700;">
+          🔄 Refresh
+        </button>
+        <span id="newsScopeLabel" class="hint" style="margin-left:auto"></span>
+      </div>
+      <div id="newsFeed" class="list">
+        <!-- News items will be dynamically loaded here -->
+        <div class="item" style="text-align: center; padding: 40px;">
+          <div class="spinner" style="width: 32px; height: 32px; margin: 0 auto 16px;"></div>
+          <div style="color: var(--muted);">Loading latest weather news...</div>
+        </div>
+      </div>
+    </section>
 
-                document.getElementById("weather").innerHTML =
-                    `<p>Weather in ${city}</p>
-                    <p>Temperature: ${temp}°C</p>
-                    <p>Condition: ${condition.replace(/_/g, " ")}</p>`;
-            } catch (error) {
-                document.getElementById("weather").innerHTML = "Error fetching weather data!";
-            }
+    <!-- News Modal -->
+    <div id="newsModal" class="news-modal">
+      <div class="news-modal-content">
+        <div class="news-modal-header">
+          <div>
+            <div id="modalTitle" class="news-modal-title"></div>
+            <div id="modalMeta" class="news-modal-meta"></div>
+          </div>
+          <button class="news-modal-close" id="closeNewsModal">&times;</button>
+        </div>
+        <div id="modalTags" class="news-modal-tags"></div>
+        <div id="modalBody" class="news-modal-body"></div>
+        <div id="modalSource" class="news-modal-source"></div>
+      </div>
+    </div>
+      </div>
+    </div>
+
+    <!-- Survival Tips Section -->
+    <section class="card" style="margin-top:16px">
+      <div class="title">🆘 Disaster Survival Tips & Information</div>
+      
+      <!-- Disaster Type Selector -->
+      <div style="margin-bottom: 20px;">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
+          <button class="disaster-tip-btn active" data-disaster="hurricane">🌪️ Hurricane</button>
+          <button class="disaster-tip-btn" data-disaster="earthquake">🌋 Earthquake</button>
+          <button class="disaster-tip-btn" data-disaster="flood">🌊 Flood</button>
+          <button class="disaster-tip-btn" data-disaster="wildfire">🔥 Wildfire</button>
+          <button class="disaster-tip-btn" data-disaster="tornado">🌪️ Tornado</button>
+          <button class="disaster-tip-btn" data-disaster="tsunami">🌊 Tsunami</button>
+        </div>
+      </div>
+
+      <!-- Tips Content -->
+      <div id="survivalTips" class="list">
+        <!-- Hurricane Tips (Default) -->
+        <div class="tip-content" id="hurricane-tips">
+          <div class="item">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <div style="width: 32px; height: 32px; background: #ef4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; flex-shrink: 0;">⚠️</div>
+              <div>
+                <div style="font-weight: 600; margin-bottom: 8px;">Before Hurricane Strikes</div>
+                <ul style="margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.6;">
+                  <li>Secure outdoor objects and bring them inside</li>
+                  <li>Fill bathtubs and containers with water</li>
+                  <li>Charge all electronic devices</li>
+                  <li>Have emergency kit ready with food, water, first aid</li>
+                  <li>Know evacuation routes and shelter locations</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="item">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <div style="width: 32px; height: 32px; background: #dc2626; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; flex-shrink: 0;">🚨</div>
+              <div>
+                <div style="font-weight: 600; margin-bottom: 8px;">During Hurricane</div>
+                <ul style="margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.6;">
+                  <li>Stay indoors and away from windows</li>
+                  <li>Move to interior room or basement</li>
+                  <li>Listen to weather radio for updates</li>
+                  <li>Do not use candles (fire hazard)</li>
+                  <li>If power goes out, use flashlights</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="item">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <div style="width: 32px; height: 32px; background: #059669; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; flex-shrink: 0;">✅</div>
+              <div>
+                <div style="font-weight: 600; margin-bottom: 8px;">After Hurricane</div>
+                <ul style="margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.6;">
+                  <li>Wait for official "all clear" before going outside</li>
+                  <li>Check for gas leaks and electrical damage</li>
+                  <li>Avoid walking in floodwaters</li>
+                  <li>Contact family to let them know you're safe</li>
+                  <li>Document damage for insurance claims</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Earthquake Tips -->
+        <div class="tip-content" id="earthquake-tips" style="display: none;">
+          <div class="item">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <div style="width: 32px; height: 32px; background: #ef4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; flex-shrink: 0;">⚠️</div>
+              <div>
+                <div style="font-weight: 600; margin-bottom: 8px;">Before Earthquake</div>
+                <ul style="margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.6;">
+                  <li>Secure heavy furniture and appliances</li>
+                  <li>Create emergency plan with family</li>
+                  <li>Keep emergency supplies accessible</li>
+                  <li>Know how to turn off utilities</li>
+                  <li>Practice "Drop, Cover, and Hold On"</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="item">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <div style="width: 32px; height: 32px; background: #dc2626; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; flex-shrink: 0;">🚨</div>
+              <div>
+                <div style="font-weight: 600; margin-bottom: 8px;">During Earthquake</div>
+                <ul style="margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.6;">
+                  <li>DROP to the ground</li>
+                  <li>COVER under sturdy furniture</li>
+                  <li>HOLD ON until shaking stops</li>
+                  <li>Stay away from windows and glass</li>
+                  <li>If outdoors, move to open area</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="item">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <div style="width: 32px; height: 32px; background: #059669; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; flex-shrink: 0;">✅</div>
+              <div>
+                <div style="font-weight: 600; margin-bottom: 8px;">After Earthquake</div>
+                <ul style="margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.6;">
+                  <li>Check for injuries and provide first aid</li>
+                  <li>Check for gas leaks and turn off if needed</li>
+                  <li>Listen to emergency broadcasts</li>
+                  <li>Expect aftershocks</li>
+                  <li>Help neighbors if safe to do so</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flood Tips -->
+        <div class="tip-content" id="flood-tips" style="display: none;">
+          <div class="item">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <div style="width: 32px; height: 32px; background: #ef4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; flex-shrink: 0;">⚠️</div>
+              <div>
+                <div style="font-weight: 600; margin-bottom: 8px;">Before Flood</div>
+                <ul style="margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.6;">
+                  <li>Move valuables to higher floors</li>
+                  <li>Fill sandbags for protection</li>
+                  <li>Have emergency kit ready</li>
+                  <li>Know evacuation routes</li>
+                  <li>Turn off utilities if instructed</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="item">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <div style="width: 32px; height: 32px; background: #dc2626; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; flex-shrink: 0;">🚨</div>
+              <div>
+                <div style="font-weight: 600; margin-bottom: 8px;">During Flood</div>
+                <ul style="margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.6;">
+                  <li>Move to higher ground immediately</li>
+                  <li>Never walk or drive through floodwaters</li>
+                  <li>Stay away from downed power lines</li>
+                  <li>Listen to emergency broadcasts</li>
+                  <li>Evacuate if ordered to do so</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="item">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <div style="width: 32px; height: 32px; background: #059669; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; flex-shrink: 0;">✅</div>
+              <div>
+                <div style="font-weight: 600; margin-bottom: 8px;">After Flood</div>
+                <ul style="margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.6;">
+                  <li>Return only when authorities say it's safe</li>
+                  <li>Check for structural damage</li>
+                  <li>Clean and disinfect everything</li>
+                  <li>Document damage for insurance</li>
+                  <li>Be aware of health hazards</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Wildfire Tips -->
+        <div class="tip-content" id="wildfire-tips" style="display: none;">
+          <div class="item">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <div style="width: 32px; height: 32px; background: #ef4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; flex-shrink: 0;">⚠️</div>
+              <div>
+                <div style="font-weight: 600; margin-bottom: 8px;">Before Wildfire</div>
+                <ul style="margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.6;">
+                  <li>Create defensible space around property</li>
+                  <li>Remove flammable materials</li>
+                  <li>Have evacuation plan ready</li>
+                  <li>Pack emergency supplies</li>
+                  <li>Monitor fire conditions</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="item">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <div style="width: 32px; height: 32px; background: #dc2626; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; flex-shrink: 0;">🚨</div>
+              <div>
+                <div style="font-weight: 600; margin-bottom: 8px;">During Wildfire</div>
+                <ul style="margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.6;">
+                  <li>Evacuate immediately if ordered</li>
+                  <li>Close all windows and doors</li>
+                  <li>Turn off air conditioning</li>
+                  <li>Wear protective clothing</li>
+                  <li>Follow evacuation routes</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="item">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <div style="width: 32px; height: 32px; background: #059669; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; flex-shrink: 0;">✅</div>
+              <div>
+                <div style="font-weight: 600; margin-bottom: 8px;">After Wildfire</div>
+                <ul style="margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.6;">
+                  <li>Wait for official clearance to return</li>
+                  <li>Check for hot spots and embers</li>
+                  <li>Assess property damage</li>
+                  <li>Contact insurance company</li>
+                  <li>Be aware of air quality</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tornado Tips -->
+        <div class="tip-content" id="tornado-tips" style="display: none;">
+          <div class="item">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <div style="width: 32px; height: 32px; background: #ef4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; flex-shrink: 0;">⚠️</div>
+              <div>
+                <div style="font-weight: 600; margin-bottom: 8px;">Before Tornado</div>
+                <ul style="margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.6;">
+                  <li>Identify safe room or shelter</li>
+                  <li>Have emergency kit ready</li>
+                  <li>Monitor weather conditions</li>
+                  <li>Know warning signs</li>
+                  <li>Practice tornado drills</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="item">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <div style="width: 32px; height: 32px; background: #dc2626; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; flex-shrink: 0;">🚨</div>
+              <div>
+                <div style="font-weight: 600; margin-bottom: 8px;">During Tornado</div>
+                <ul style="margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.6;">
+                  <li>Go to basement or interior room</li>
+                  <li>Stay away from windows</li>
+                  <li>Cover head and neck</li>
+                  <li>If outdoors, lie flat in ditch</li>
+                  <li>Listen for emergency updates</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="item">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <div style="width: 32px; height: 32px; background: #059669; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; flex-shrink: 0;">✅</div>
+              <div>
+                <div style="font-weight: 600; margin-bottom: 8px;">After Tornado</div>
+                <ul style="margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.6;">
+                  <li>Check for injuries</li>
+                  <li>Stay away from damaged buildings</li>
+                  <li>Check for gas leaks</li>
+                  <li>Listen to emergency broadcasts</li>
+                  <li>Help others if safe</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tsunami Tips -->
+        <div class="tip-content" id="tsunami-tips" style="display: none;">
+          <div class="item">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <div style="width: 32px; height: 32px; background: #ef4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; flex-shrink: 0;">⚠️</div>
+              <div>
+                <div style="font-weight: 600; margin-bottom: 8px;">Before Tsunami</div>
+                <ul style="margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.6;">
+                  <li>Know if you're in tsunami zone</li>
+                  <li>Learn evacuation routes</li>
+                  <li>Have emergency kit ready</li>
+                  <li>Know warning signs</li>
+                  <li>Practice evacuation drills</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="item">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <div style="width: 32px; height: 32px; background: #dc2626; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; flex-shrink: 0;">🚨</div>
+              <div>
+                <div style="font-weight: 600; margin-bottom: 8px;">During Tsunami</div>
+                <ul style="margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.6;">
+                  <li>Move to higher ground immediately</li>
+                  <li>Go inland and uphill</li>
+                  <li>Follow evacuation orders</li>
+                  <li>Stay away from beaches</li>
+                  <li>Listen to emergency broadcasts</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="item">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+              <div style="width: 32px; height: 32px; background: #059669; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; flex-shrink: 0;">✅</div>
+              <div>
+                <div style="font-weight: 600; margin-bottom: 8px;">After Tsunami</div>
+                <ul style="margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.6;">
+                  <li>Wait for official clearance</li>
+                  <li>Check for injuries</li>
+                  <li>Stay away from damaged areas</li>
+                  <li>Listen to emergency updates</li>
+                  <li>Help others if safe</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    Data: Open-Meteo, USGS, NASA EONET • No API keys • Enhanced with modern UI
+  </footer>
+
+  <script>
+    // ----------------- Config -----------------
+    const ALERT_RADIUS_KM = 300;        // Alerts "in your city" radius
+    const EONET_MAX_DIST_KM = ALERT_RADIUS_KM;
+    const QUAKES_MAX_DIST_KM = ALERT_RADIUS_KM;
+
+    // Only show these NASA categories
+    const IMPORTANT_EONET = new Set([
+      "Floods", "Volcanoes", "Severe Storms", "Tropical Cyclones", "Wildfires", "Landslides"
+    ]);
+    // Track the currently selected place for location-aware features (e.g., news)
+    let currentPlace = null;
+
+    // -------------- Small helpers --------------
+    const $ = (id)=>document.getElementById(id);
+    const toTime = (d)=> new Date(d).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    const toDate = (d)=> new Date(d).toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'});
+    const clamp = (n,min,max)=>Math.max(min,Math.min(max,n));
+    const km = (m)=> (m/1000).toFixed(0);
+
+    // Toast notification system
+    function showToast(message, type = 'info', duration = 4000) {
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.innerHTML = `
+        <div style="font-weight: 600; margin-bottom: 4px;">${type.charAt(0).toUpperCase() + type.slice(1)}</div>
+        <div>${message}</div>
+      `;
+      document.body.appendChild(toast);
+      
+      setTimeout(() => toast.classList.add('show'), 100);
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+      }, duration);
+    }
+
+    function haversine(lat1, lon1, lat2, lon2){
+      const R = 6371e3;
+      const toRad = x => x * Math.PI/180;
+      const φ1 = toRad(lat1), φ2 = toRad(lat2);
+      const Δφ = toRad(lat2-lat1);
+      const Δλ = toRad(lon2-lon1);
+      const a = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    // Open-Meteo weather codes
+    const WMAP = {
+      0:["Clear sky","☀️"],1:["Mainly clear","🌤️"],2:["Partly cloudy","⛅"],3:["Overcast","☁️"],
+      45:["Fog","🌫️"],48:["Rime fog","🌫️"],
+      51:["Light drizzle","🌦️"],53:["Moderate drizzle","🌦️"],55:["Dense drizzle","🌧️"],
+      56:["Freezing drizzle","🌧️"],57:["Freezing drizzle","🌧️"],
+      61:["Slight rain","🌧️"],63:["Moderate rain","🌧️"],65:["Heavy rain","🌧️"],
+      66:["Freezing rain","🌧️"],67:["Freezing rain","🌧️"],
+      71:["Slight snow","🌨️"],73:["Moderate snow","🌨️"],75:["Heavy snow","❄️"],
+      77:["Snow grains","❄️"],
+      80:["Rain showers","🌦️"],81:["Heavy showers","🌧️"],82:["Violent showers","⛈️"],
+      85:["Snow showers","🌨️"],86:["Heavy snow","❄️"],
+      95:["Thunderstorm","⛈️"],96:["Storm w/ hail","⛈️"],99:["Severe storm","⛈️"]
+    };
+
+    // -------------- Data fetchers (no keys) --------------
+    async function geocodeCity(q){
+      try {
+        const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=en&format=json`;
+        const r = await fetch(url);
+        if(!r.ok) throw new Error(`HTTP ${r.status}`);
+        const j = await r.json();
+        
+        // Debug logging
+        console.log('Geocoding response:', j);
+        
+        if (!j.results || !Array.isArray(j.results)) {
+          console.error('Invalid response format:', j);
+          return [];
         }
-    </script>
+        
+        return j.results.map(c => {
+          // Ensure all required properties exist with fallbacks
+          const result = {
+            name: c.name || 'Unknown City',
+            admin: c.admin1 || c.admin || '',
+            country: c.country || '',
+            lat: parseFloat(c.latitude) || 0,
+            lon: parseFloat(c.longitude) || 0,
+            tz: c.timezone || 'auto'
+          };
+          
+          // Validate coordinates
+          if (isNaN(result.lat) || isNaN(result.lon) || result.lat === 0 || result.lon === 0) {
+            console.error('Invalid coordinates for city:', c);
+            return null;
+          }
+          
+          return result;
+        }).filter(Boolean); // Remove any null results
+      } catch (error) {
+        console.error('Geocoding error:', error);
+        if (error.message.includes('Failed to fetch')) {
+          showToast('Network error. Please check your internet connection.', 'error');
+        } else {
+          showToast('Failed to search cities. Please try again.', 'error');
+        }
+        return [];
+      }
+    }
+
+    async function reverseGeocode(lat, lon){
+      try {
+        const url = `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&language=en&format=json`;
+        const r = await fetch(url);
+        if(!r.ok) throw new Error(`HTTP ${r.status}`);
+        const j = await r.json();
+        const res = (j.results && j.results[0]) || {};
+        return { name: res.name || "My location", country: res.country || "", tz: res.timezone || "auto" };
+      } catch (error) {
+        console.error('Reverse geocoding error:', error);
+        return { name: "My location", country: "", tz: "auto" };
+      }
+    }
+
+    async function fetchWeather(lat, lon, tz="auto"){
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`+
+                  `&current_weather=true&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,weathercode,wind_speed_10m`+
+                  `&daily=weathercode,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=${encodeURIComponent(tz)}`;
+      // Simple retry once to avoid transient startup failures
+      for (let attempt = 0; attempt < 2; attempt++){
+        try{
+          const r = await fetch(url);
+          if(!r.ok) throw new Error(`HTTP ${r.status}`);
+          return await r.json();
+        }catch(error){
+          if (attempt === 1){
+            console.error('Weather fetch error:', error);
+            if (error.message && error.message.includes('Failed to fetch')) {
+              showToast('Network error. Please check your internet connection.', 'error');
+            } else {
+              showToast('Failed to fetch weather data. Please try again.', 'error');
+            }
+            throw error;
+          }
+          await new Promise(res=>setTimeout(res, 600));
+        }
+      }
+    }
+
+    async function fetchAirQuality(lat, lon, tz="auto"){
+      try {
+        const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}`+
+                    `&hourly=pm10,pm2_5&timezone=${encodeURIComponent(tz)}`;
+        const r = await fetch(url);
+        if(!r.ok) throw new Error(`HTTP ${r.status}`);
+        return await r.json();
+      } catch (error) {
+        console.error('Air quality fetch error:', error);
+        // Don't show toast for air quality as it's not critical
+        return null;
+      }
+    }
+
+    async function fetchUSGSEarthquakes(lat, lon, days=7, radiusKm=QUAKES_MAX_DIST_KM){
+      try {
+        const start = new Date(Date.now() - days*24*60*60*1000).toISOString().split("T")[0];
+        const url = `https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=${start}`+
+                    `&latitude=${lat}&longitude=${lon}&maxradiuskm=${radiusKm}`;
+        const r = await fetch(url);
+        if(!r.ok) throw new Error(`HTTP ${r.status}`);
+        return await r.json();
+      } catch (error) {
+        console.error('Earthquake fetch error:', error);
+        // Don't show toast for earthquakes as it's not critical
+        return { features: [] };
+      }
+    }
+
+    async function fetchEONET(){
+      try {
+        const url = `https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=100`;
+        const r = await fetch(url);
+        if(!r.ok) throw new Error(`HTTP ${r.status}`);
+        return await r.json();
+      } catch (error) {
+        console.error('EONET fetch error:', error);
+        // Don't show toast for EONET as it's not critical
+        return { events: [] };
+      }
+    }
+
+    // -------------- Map --------------
+    let map, userMarker, quakesLayer, eonetLayer;
+    function ensureMap(lat, lon){
+      if(!map){
+        map = L.map('map').setView([lat, lon], 7);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+          maxZoom:19, attribution:'© OpenStreetMap'
+        }).addTo(map);
+        quakesLayer = L.layerGroup().addTo(map);
+        eonetLayer  = L.layerGroup().addTo(map);
+      }else{
+        map.setView([lat, lon], 7);
+        quakesLayer.clearLayers();
+        eonetLayer.clearLayers();
+      }
+      if(userMarker) map.removeLayer(userMarker);
+      userMarker = L.marker([lat,lon], {title:"Selected location"}).addTo(map).bindPopup("Selected location");
+    }
+
+    // -------------- Chart --------------
+    let chart;
+    function renderChart(labels, temps){
+      const canvas = $("tempChart");
+      canvas.style.opacity = "0";
+      const ctx = canvas.getContext("2d");
+      if(chart) chart.destroy();
+      chart = new Chart(ctx,{
+        type:'line',
+        data:{ 
+          labels, 
+          datasets:[{ 
+            label:"°C", 
+            data:temps, 
+            tension:.35, 
+            fill:false,
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56, 189, 248, 0.1)',
+            pointBackgroundColor: '#38bdf8',
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 2,
+            pointRadius: 4
+          }]
+        },
+        options:{
+          responsive:true,
+          plugins:{ legend:{ display:false }},
+          scales:{
+            y:{ 
+              ticks:{ callback:v=>v+"°" },
+              grid: { color: 'rgba(148, 163, 184, 0.1)' }
+            },
+            x:{ 
+              ticks:{ maxRotation:0, autoSkip:true, maxTicksLimit:12 },
+              grid: { color: 'rgba(148, 163, 184, 0.1)' }
+            }
+          }
+        }
+      });
+      
+      // Fade in the chart
+      setTimeout(() => {
+        canvas.style.opacity = "1";
+      }, 100);
+    }
+
+    // -------------- UI renderers --------------
+    function setCurrentUI(placeName, cw, hourly, daily, aqi){
+      const code = cw.weathercode;
+      const wm = WMAP[code] || ["—","⛅"];
+      $("icon").textContent = wm[1];
+      $("place").textContent = placeName;
+      $("desc").textContent = wm[0];
+      $("temp").textContent = Math.round(cw.temperature)+"°C";
+      $("time").textContent = `As of ${toTime(cw.time)}`;
+
+      // Find current hour index safely
+      let idx = hourly.time.indexOf(cw.time);
+      if(idx < 0){
+        // Fallback: find closest hour
+        const now = new Date(cw.time).getTime();
+        let best = 0, bestDiff = Infinity;
+        hourly.time.forEach((t,i)=>{
+          const diff = Math.abs(new Date(t).getTime()-now);
+          if(diff < bestDiff){ best=i; bestDiff=diff; }
+        });
+        idx = best;
+      }
+      const feels = hourly.apparent_temperature ? Math.round(hourly.apparent_temperature[idx]) : "—";
+      const hum   = hourly.relative_humidity_2m ? hourly.relative_humidity_2m[idx] : "—";
+      $("feels").textContent = `Feels like ${feels}°C`;
+      $("humidity").textContent = `Humidity ${hum}%`;
+      $("wind").textContent = `Wind ${Math.round(cw.windspeed)} km/h`;
+      if(daily.sunrise && daily.sunset){
+        $("sun").textContent = `Sunrise ${toTime(daily.sunrise[0])} / Sunset ${toTime(daily.sunset[0])}`;
+      }
+      // Air quality badge
+      if(aqi && aqi.hourly && aqi.hourly.time){
+        const last = aqi.hourly.time.length - 1;
+        const pm25 = aqi.hourly.pm2_5 ? aqi.hourly.pm2_5[last] : null;
+        const pm10 = aqi.hourly.pm10 ? aqi.hourly.pm10[last] : null;
+        if(pm25 != null){
+          let badge = "OK", cls="ok";
+          if(pm25 > 55 || pm10 > 150){ badge = "Poor"; cls="bad"; }
+          else if(pm25 > 35 || pm10 > 100){ badge = "Moderate"; cls="warn"; }
+          $("aqi").innerHTML = `Air: <span class="${cls}">${badge}</span>${pm25!=null?` (PM2.5 ${Math.round(pm25)} μg/m³)`:""}`;
+        }
+      }
+
+      // Forecast cards (3D)
+      const fc = $("forecast"); fc.innerHTML = "";
+      const days = Math.min(5, daily.time.length);
+      for(let i=0;i<days;i++){
+        const m = WMAP[daily.weathercode[i]] || ["—","⛅"];
+        const wrapper = document.createElement("div");
+        wrapper.className = "day3d";
+        const el = document.createElement("div");
+        el.className = "day";
+        el.innerHTML = `
+          <div style="color:var(--muted)">${i===0 ? "Today" : toDate(daily.time[i])}</div>
+          <div class="emoji" style="margin:8px 0">${m[1]}</div>
+          <div style="font-weight:700">${Math.round(daily.temperature_2m_max[i])}° / ${Math.round(daily.temperature_2m_min[i])}°</div>
+          <div style="color:var(--muted); font-size:13px">${m[0]}</div>
+        `;
+        // 3D hover tilt
+        wrapper.addEventListener("mousemove", (e)=>{
+          const rect = wrapper.getBoundingClientRect();
+          const cx = rect.left + rect.width/2;
+          const cy = rect.top + rect.height/2;
+          const dx = (e.clientX - cx) / (rect.width/2);
+          const dy = (e.clientY - cy) / (rect.height/2);
+          const maxTilt = 10; // degrees
+          el.style.transform = `rotateY(${dx*maxTilt}deg) rotateX(${-dy*maxTilt}deg) translateZ(0)`;
+          el.style.boxShadow = `${-dx*10}px ${dy*14}px 24px rgba(0,0,0,0.35)`;
+        });
+        wrapper.addEventListener("mouseleave", ()=>{
+          el.style.transform = `rotateX(0deg) rotateY(0deg)`;
+          el.style.boxShadow = `0 8px 18px rgba(0,0,0,0.25)`;
+        });
+
+        wrapper.appendChild(el);
+        fc.appendChild(wrapper);
+      }
+
+      // 24h chart
+      const labels = hourly.time.slice(idx, idx+24).map(t => new Date(t).toLocaleTimeString([], {hour:'numeric'}));
+      const temps  = hourly.temperature_2m.slice(idx, idx+24).map(v=>Math.round(v));
+      renderChart(labels, temps);
+    }
+
+    function renderQuakes(lat, lon, data){
+      const list = $("quakes"); list.innerHTML = "";
+      quakesLayer.clearLayers();
+      if(!(data && data.features && data.features.length)){
+        list.innerHTML = "<div class='item'>No recent earthquakes nearby.</div>";
+        return;
+      }
+      // Filter by distance to city
+      const filtered = data.features.map(f=>{
+        const [qLon, qLat, qDepth] = f.geometry.coordinates;
+        const distM = haversine(lat,lon,qLat,qLon);
+        return {...f, _distM: distM};
+      }).filter(f=> f._distM/1000 <= QUAKES_MAX_DIST_KM);
+
+      if(!filtered.length){
+        list.innerHTML = `<div class='item'>No earthquakes within ${QUAKES_MAX_DIST_KM} km.</div>`;
+        return;
+      }
+
+      const items = filtered.map(f=>{
+        const [qLon, qLat] = f.geometry.coordinates;
+        const dist = f._distM;
+        const mag = f.properties.mag;
+        const time = new Date(f.properties.time);
+        const tsunami = f.properties.tsunami === 1; // USGS flag
+        return {lat:qLat, lon:qLon, dist, mag, time, title:f.properties.title, url:f.properties.url, tsunami};
+      }).sort((a,b)=>a.dist-b.dist).slice(0,10);
+
+      items.forEach(it=>{
+        const sev = it.mag>=6 ? "bad" : (it.mag>=4.5 ? "warn" : "ok");
+        const color = sev==="bad" ? '#ef4444' : (sev==="warn" ? '#f59e0b' : '#34d399');
+        L.circleMarker([it.lat,it.lon],{
+          radius: clamp(it.mag*2.2, 4, 12),
+          color, weight:2, fillOpacity:.6
+        }).addTo(quakesLayer).bindPopup(`${it.title}<br>${km(it.dist)} km away${it.tsunami ? "<br><b>⚠ Tsunami potential</b>":""}`);
+
+        const div = document.createElement("div");
+        div.className = "item";
+        div.innerHTML = `
+          <div><strong class="${sev}">M ${it.mag.toFixed(1)}</strong> • ${it.time.toLocaleString()}
+            ${it.tsunami ? `<span class="tag blue">Tsunami?</span>` : ``}
+          </div>
+          <div style="color:var(--muted)">${km(it.dist)} km away</div>
+          <a href="${it.url}" target="_blank" rel="noopener">Details</a>
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    function renderEONET(lat, lon, data, maxDistKm=EONET_MAX_DIST_KM){
+      const list = $("eonet"); list.innerHTML = "";
+      eonetLayer.clearLayers();
+      if(!(data && data.events && data.events.length)){
+        list.innerHTML = "<div class='item'>No active NASA events.</div>";
+        return;
+      }
+
+      const pts = [];
+      data.events.forEach(ev=>{
+        const catTitle = (ev.categories && ev.categories[0] && ev.categories[0].title) || "Event";
+        if(!IMPORTANT_EONET.has(catTitle)) return; // keep only important ones
+
+        ev.geometries.forEach(g=>{
+          const coords = g.coordinates;
+          let lonE, latE;
+          if(Array.isArray(coords[0])){
+            if(Array.isArray(coords[0][0])){
+              [lonE, latE] = coords[0][0];
+            } else {
+              [lonE, latE] = coords[0];
+            }
+          } else {
+            [lonE, latE] = coords;
+          }
+          if(typeof latE !== "number" || typeof lonE !== "number") return;
+          const distKm = haversine(lat,lon,latE,lonE)/1000;
+          if(distKm <= maxDistKm){
+            pts.push({
+              title: ev.title, cat: catTitle, lat: latE, lon: lonE, distKm, link: ev.link || "#"
+            });
+          }
+        });
+      });
+
+      if(!pts.length){
+        list.innerHTML = `<div class='item'>No active events within ${maxDistKm} km.</div>`;
+        return;
+      }
+
+      pts.sort((a,b)=>a.distKm-b.distKm).slice(0,10).forEach(p=>{
+        L.marker([p.lat,p.lon]).addTo(eonetLayer)
+          .bindPopup(`${p.cat}: ${p.title}<br>${p.distKm.toFixed(0)} km away`);
+        const div = document.createElement("div");
+        div.className = "item";
+        div.innerHTML = `
+          <div><strong>${p.cat}</strong> — ${p.title}</div>
+          <div style="color:var(--muted)">${p.distKm.toFixed(0)} km away</div>
+          ${p.link ? `<a href="${p.link}" target="_blank" rel="noopener">Event page</a>` : ""}
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    // -------------- Orchestrator --------------
+    async function loadAll(place){
+      try {
+        const {name, country, tz, lat, lon} = place;
+        
+        // Validate place data
+        if (!name || isNaN(lat) || isNaN(lon) || lat === 0 || lon === 0) {
+          console.error('Invalid place data:', place);
+          showToast('Invalid city data. Please try searching again.', 'error');
+          return;
+        }
+        
+        console.log('Loading weather for:', { name, country, tz, lat, lon });
+        currentPlace = { name, country, tz, lat, lon };
+        
+        // Show loading state
+        document.body.classList.add('loading');
+        
+        $("place").textContent = `${name}${country?`, ${country}`:""}`;
+        ensureMap(lat, lon);
+
+        const [w, aq, quakes, eonet] = await Promise.all([
+          fetchWeather(lat, lon, tz||"auto"),
+          fetchAirQuality(lat, lon, tz||"auto"),
+          fetchUSGSEarthquakes(lat, lon, 7, 1000), // USGS fetch wider range first
+          fetchEONET()
+        ]);
+
+        // Validate weather data
+        if (!w || !w.current_weather || !w.hourly || !w.daily) {
+          throw new Error('Invalid weather data received');
+        }
+
+        setCurrentUI(`${name}${country?`, ${country}`:""}`, w.current_weather, w.hourly, w.daily, aq);
+
+        // Filter/Render within city radius
+        // Earthquakes: we fetched within 1000km; filter to city radius for display
+        quakes.features = (quakes.features||[]).filter(f=>{
+          const [qLon, qLat] = f.geometry.coordinates;
+          return (haversine(lat,lon,qLat,qLon)/1000) <= QUAKES_MAX_DIST_KM;
+        });
+        renderQuakes(lat, lon, quakes);
+
+        renderEONET(lat, lon, eonet, EONET_MAX_DIST_KM);
+
+        localStorage.setItem("lastPlace", JSON.stringify(place));
+        
+        // Remove loading state
+        document.body.classList.remove('loading');
+        
+        showToast(`Weather loaded for ${name}!`, 'success');
+        // Update news scope label and refresh location-aware news after successful load
+        updateNewsScopeLabel();
+        renderNewsFeed();
+        
+      } catch (error) {
+        console.error('Error loading weather:', error);
+        showToast('Failed to load weather data. Please try again.', 'error');
+        document.body.classList.remove('loading');
+      }
+    }
+
+    // -------------- Search + Location --------------
+    const search = $("search");
+    const sugg = $("suggest");
+    let debounce;
+
+    search.addEventListener("input", ()=>{
+      const q = search.value.trim();
+      if(debounce) clearTimeout(debounce);
+      if(q.length < 2){ sugg.style.display="none"; return; }
+      
+      // Show loading state
+      sugg.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--muted);"><div class="spinner"></div><div style="margin-top: 8px;">Searching...</div></div>';
+      sugg.style.display="block";
+      
+      debounce = setTimeout(async ()=>{
+        const results = await geocodeCity(q);
+        if(!results.length){ sugg.style.display="none"; return; }
+        sugg.innerHTML = results.map(c =>
+          `<div class="search-result" data-lat="${c.lat}" data-lon="${c.lon}" data-name="${c.name}" data-country="${c.country}" data-tz="${c.tz}">
+             <div class="location-icon">📍</div>
+             <div>
+               <div style="font-weight: 600;">${c.name}${c.admin?`, ${c.admin}`:""}</div>
+               <div style="color:var(--muted); font-size: 13px;">${c.country}</div>
+             </div>
+           </div>`
+        ).join("");
+        sugg.style.display="block";
+      }, 250);
+    });
+
+    sugg.addEventListener("click", (e)=>{
+      const div = e.target.closest("div[data-lat]");
+      if(!div) return;
+      
+      // Validate data before proceeding
+      const lat = Number(div.dataset.lat);
+      const lon = Number(div.dataset.lon);
+      const name = div.dataset.name;
+      const country = div.dataset.country;
+      const tz = div.dataset.tz;
+      
+      if (isNaN(lat) || isNaN(lon) || lat === 0 || lon === 0) {
+        console.error('Invalid coordinates:', { lat, lon, name, country });
+        showToast('Invalid city data. Please try searching again.', 'error');
+        return;
+      }
+      
+      sugg.style.display="none";
+      search.value = `${name}, ${country}`;
+      
+      console.log('Loading city:', { name, country, tz, lat, lon });
+      
+      loadAll({
+        name: name,
+        country: country,
+        tz: tz,
+        lat: lat,
+        lon: lon
+      });
+    });
+
+    document.addEventListener("click",(e)=>{
+      if(e.target!==search && !sugg.contains(e.target)) sugg.style.display="none";
+    });
+
+    // Enhanced location button with better error handling
+    $("locBtn").addEventListener("click", async ()=>{
+      const locBtn = $("locBtn");
+      const locBtnText = $("locBtnText");
+      const locBtnSpinner = $("locBtnSpinner");
+      
+      if(!navigator.geolocation){
+        showToast("Geolocation not supported by your browser.", "error");
+        return;
+      }
+      
+      // Show loading state
+      locBtn.disabled = true;
+      locBtnText.style.display = "none";
+      locBtnSpinner.style.display = "inline-block";
+      
+      try {
+        const position = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { 
+            enableHighAccuracy: true, 
+            timeout: 15000,
+            maximumAge: 60000
+          });
+        });
+        
+        const {latitude:lat, longitude:lon} = position.coords;
+        const meta = await reverseGeocode(lat, lon);
+        const place = { name: meta.name, country: meta.country, tz: meta.tz, lat, lon };
+        
+        search.value = `${meta.name}${meta.country?`, ${meta.country}`:""}`;
+        await loadAll(place);
+        
+        showToast(`Location detected: ${meta.name}`, 'success');
+        
+      } catch (error) {
+        console.error('Location error:', error);
+        
+        let errorMessage = "Couldn't get your location.";
+        if (error.code === 1) {
+          errorMessage = "Location access denied. Please allow location access in your browser settings.";
+        } else if (error.code === 2) {
+          errorMessage = "Location unavailable. Please try again.";
+        } else if (error.code === 3) {
+          errorMessage = "Location request timed out. Please try again.";
+        } else if (error.message.includes('HTTPS')) {
+          errorMessage = "Location requires HTTPS. Please use HTTPS or localhost.";
+        }
+        
+        showToast(errorMessage, 'error');
+      } finally {
+        // Reset button state
+        locBtn.disabled = false;
+        locBtnText.style.display = "inline";
+        locBtnSpinner.style.display = "none";
+      }
+    });
+
+    // Initial load: last place or default: Mumbai
+    (async ()=>{
+      try {
+        // Show initial loading state
+        document.body.classList.add('loading');
+        
+        const saved = localStorage.getItem("lastPlace");
+        if(saved){
+          await loadAll(JSON.parse(saved));
+        }else{
+          const m = await geocodeCity("Mumbai");
+          if(m[0]) await loadAll({ ...m[0] });
+        }
+      } catch (error) {
+        console.error('Initial load error:', error);
+        showToast('Failed to load initial weather data.', 'error');
+        document.body.classList.remove('loading');
+      }
+    })();
+
+    // -------------- Disaster Tips Functionality --------------
+    const disasterTipBtns = document.querySelectorAll('.disaster-tip-btn');
+    const tipContents = document.querySelectorAll('.tip-content');
+
+    disasterTipBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        // Remove active class from all buttons
+        disasterTipBtns.forEach(b => b.classList.remove('active'));
+        
+        // Add active class to clicked button
+        btn.classList.add('active');
+        
+        // Hide all tip contents
+        tipContents.forEach(content => {
+          content.style.display = 'none';
+          content.style.opacity = '0';
+          content.style.transform = 'translateY(10px)';
+        });
+        
+        // Show selected tip content
+        const disasterType = btn.dataset.disaster;
+        const selectedContent = document.getElementById(`${disasterType}-tips`);
+        if (selectedContent) {
+          selectedContent.style.display = 'block';
+          // Trigger animation
+          setTimeout(() => {
+            selectedContent.style.opacity = '1';
+            selectedContent.style.transform = 'translateY(0)';
+          }, 50);
+        }
+      });
+    });
+
+    // -------------- News Feed Functionality --------------
+    
+    // Auto-refresh news every 30 minutes (1800000 ms)
+    setInterval(() => {
+      renderNewsFeed();
+    }, 1800000);
+    
+    // Restore news controls from localStorage and initial news load
+    (function initNewsControls(){
+      const modeEl = document.getElementById('newsMode');
+      const queryEl = document.getElementById('newsQuery');
+      const savedMode = localStorage.getItem('newsMode');
+      const savedQuery = localStorage.getItem('newsQuery');
+      
+      if (modeEl && savedMode){ 
+        modeEl.value = savedMode; 
+      }
+      if (queryEl && savedQuery){ 
+        queryEl.value = savedQuery; 
+      }
+      
+      if (modeEl && queryEl){
+        const showInput = modeEl.value === 'country' || modeEl.value === 'city';
+        queryEl.style.display = showInput ? 'block' : 'none';
+      }
+      
+      // Update scope label and initial news load with delay to ensure everything is loaded
+      setTimeout(() => {
+        updateNewsScopeLabel();
+        renderNewsFeed();
+      }, 1000);
+    })();
+
+    // -------------- News Modal Functionality --------------
+    const newsModal = document.getElementById('newsModal');
+    const closeNewsModal = document.getElementById('closeNewsModal');
+    const newsItems = document.querySelectorAll('.news-item');
+
+    // News API configuration - Using free alternative since NewsAPI requires paid subscription
+    const NEWS_API_URL = 'https://newsapi.org/v2/everything';
+    
+    // Weather and disaster related keywords for news search
+    // Strict weather/disaster keywords for filtering
+    const WEATHER_KEYWORDS = [
+      'weather', 'storm', 'severe storm', 'thunderstorm', 'cyclone', 'hurricane', 'tropical storm',
+      'tornado', 'flood', 'flash flood', 'river flooding', 'landslide', 'mudslide',
+      'wildfire', 'bushfire', 'forest fire', 'earthquake', 'aftershock', 'tsunami',
+      'heat wave', 'extreme heat', 'cold wave', 'blizzard', 'snowstorm', 'ice storm',
+      'avalanch', 'drought', 'monsoon', 'typhoon', 'dust storm', 'hailstorm',
+      'air quality alert', 'weather warning', 'red alert', 'amber alert', 'evacuation order'
+    ];
+    
+    // News data storage
+    let newsData = {};
+    let currentNews = [];
+    
+    // Fetch real-time news with multiple fallback sources
+    async function fetchWeatherNews() {
+      try {
+        // Determine scope from controls
+        const modeEl = document.getElementById('newsMode');
+        const queryEl = document.getElementById('newsQuery');
+        const mode = modeEl ? modeEl.value : 'auto';
+        const userQuery = (queryEl && queryEl.value.trim()) || '';
+
+        // Build location-aware query
+        const scopeParts = [];
+        if (mode === 'auto'){
+          if (currentPlace && currentPlace.name) scopeParts.push(currentPlace.name);
+          if (currentPlace && currentPlace.country) scopeParts.push(currentPlace.country);
+        } else if (mode === 'country' || mode === 'city'){
+          if (userQuery) scopeParts.push(userQuery);
+        }
+        const scopeQuery = scopeParts.join(' ');
+
+        // Build comprehensive weather/disaster query
+        const weatherTerms = WEATHER_KEYWORDS.join(' OR ');
+        const criticalTerms = '(warning OR alert OR evacuation OR advisory OR watch OR emergency OR disaster)';
+        const terms = buildScopeTerms();
+        
+        let combinedQuery;
+        if (terms && terms.length > 0) {
+          // Location-specific search
+          const locationTerms = terms.map(t => `"${t}"`).join(' OR ');
+          combinedQuery = `(${weatherTerms}) AND (${locationTerms}) AND ${criticalTerms}`;
+        } else {
+          // Global weather news
+          combinedQuery = `(${weatherTerms}) AND ${criticalTerms}`;
+        }
+
+        // Try multiple news sources in order of preference
+        const newsSources = [
+          () => fetchWeatherAPI(combinedQuery, terms),
+          () => fetchGoogleNewsArticles(combinedQuery, terms),
+          () => fetchRSSNews(combinedQuery, terms)
+        ];
+
+        for (const source of newsSources) {
+          try {
+            const articles = await source();
+            if (articles && articles.length > 0) {
+              console.log(`Successfully fetched ${articles.length} articles from news source`);
+              return articles;
+            }
+          } catch (error) {
+            console.log('News source failed, trying next:', error.message);
+            continue;
+          }
+        }
+
+        // All sources failed, use demo news
+        console.log('All news sources failed, using demo news');
+        return await fetchDemoNews();
+        
+      } catch (error) {
+        console.error('Error fetching news:', error);
+        return await fetchDemoNews();
+      }
+    }
+
+    // Basic best-effort mapping for country to ISO code
+    function guessCountryCode(name){
+      if (!name) return '';
+      const n = name.toLowerCase();
+      const map = {
+        india:'IN', bharat:'IN', uk:'GB', 'united kingdom':'GB', britain:'GB', england:'GB',
+        australia:'AU', canada:'CA', germany:'DE', france:'FR', spain:'ES', italy:'IT',
+        japan:'JP', korea:'KR', 'south korea':'KR', singapore:'SG', philippines:'PH',
+        pakistan:'PK', bangladesh:'BD', 'united arab emirates':'AE', uae:'AE', saudi:'SA',
+        'south africa':'ZA', nigeria:'NG', kenya:'KE', indonesia:'ID', malaysia:'MY',
+        brazil:'BR', mexico:'MX', argentina:'AR'
+      };
+      for (const key in map){ if (n.includes(key)) return map[key]; }
+      return '';
+    }
+
+    // Fetch news from Weather API (free tier)
+    async function fetchWeatherAPI(optionalQuery, terms) {
+      try {
+        const modeEl = document.getElementById('newsMode');
+        const queryEl = document.getElementById('newsQuery');
+        const mode = modeEl ? modeEl.value : 'auto';
+        const userQuery = (queryEl && queryEl.value.trim()) || '';
+
+        // Build query based on mode and current place
+        let query = 'weather OR storm OR hurricane OR tornado OR flood OR wildfire OR earthquake OR tsunami';
+        if (mode === 'auto' && currentPlace) {
+          query += ` AND (${currentPlace.name} OR ${currentPlace.country})`;
+        } else if (mode === 'country' || mode === 'city') {
+          if (userQuery) {
+            query += ` AND ${userQuery}`;
+          }
+        }
+
+        // Use a free news API (NewsAPI.org free tier)
+        const apiKey = 'demo'; // Using demo key for testing
+        const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=en&sortBy=publishedAt&pageSize=20&apiKey=${apiKey}`;
+        
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!data.articles || !Array.isArray(data.articles)) {
+          throw new Error('Invalid response format');
+        }
+
+        let articles = data.articles.map(article => ({
+          title: article.title || '',
+          description: article.description || '',
+          url: article.url || '',
+          publishedAt: article.publishedAt || new Date().toISOString(),
+          source: { name: article.source?.name || 'News Source' },
+          content: article.content || article.description || '',
+          urlToImage: article.urlToImage || null
+        }));
+
+        // Filter for weather/disaster content
+        articles = articles.filter(a => {
+          const text = (a.title + ' ' + a.description).toLowerCase();
+          return WEATHER_KEYWORDS.some(keyword => text.includes(keyword)) ||
+                 /alert|warning|evacuation|emergency|disaster/i.test(text);
+        });
+
+        // Apply location filtering if terms are provided
+        if (terms && terms.length > 0) {
+          articles = filterByLocation(articles, terms);
+        }
+
+        return articles.slice(0, 10); // Return top 10 articles
+      } catch (error) {
+        console.error('Weather API error:', error);
+        throw error;
+      }
+    }
+
+    async function fetchGoogleNewsArticles(optionalQuery, terms){
+      try {
+        const modeEl = document.getElementById('newsMode');
+        const queryEl = document.getElementById('newsQuery');
+        const mode = modeEl ? modeEl.value : 'auto';
+        const userQuery = (queryEl && queryEl.value.trim()) || '';
+
+        // Build query based on mode and current place
+        let combinedQuery = optionalQuery;
+        if (!combinedQuery) {
+          const scopeParts = [];
+          if (mode === 'auto'){
+            if (currentPlace && currentPlace.name) scopeParts.push(currentPlace.name);
+            if (currentPlace && currentPlace.country) scopeParts.push(currentPlace.country);
+          } else if (mode === 'country' || mode === 'city'){
+            if (userQuery) scopeParts.push(userQuery);
+          }
+          const scopeQuery = scopeParts.join(' ');
+
+          const baseQuery = `(${WEATHER_KEYWORDS.join(' OR ')})`;
+          const criticalTerms = '(warning OR alert OR evacuation OR advisory OR watch OR emergency OR disaster)';
+          
+          if (scopeQuery) {
+            combinedQuery = `${baseQuery} AND "${scopeQuery}" AND ${criticalTerms}`;
+          } else {
+            combinedQuery = `${baseQuery} AND ${criticalTerms}`;
+          }
+        }
+
+        // Determine country code for Google News
+        let countryCode = 'US';
+        if (mode === 'country' && userQuery) {
+          countryCode = guessCountryCode(userQuery) || 'US';
+        } else if (currentPlace && currentPlace.country) {
+          countryCode = guessCountryCode(currentPlace.country) || 'US';
+        }
+
+        // Build Google News RSS URL
+        const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(combinedQuery)}&hl=en&gl=${countryCode}&ceid=${countryCode}:en`;
+        
+        // Use CORS proxy to avoid cross-origin issues
+        const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`;
+
+        const r = await fetch(proxied);
+        if (!r.ok) throw new Error('RSS fetch failed');
+        
+        const xmlText = await r.text();
+        const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+        const items = Array.from(doc.querySelectorAll('item'));
+
+        let articles = items.slice(0, 20).map(it => {
+          const title = (it.querySelector('title')?.textContent || '').replace(/\s+-\s+.*$/, '');
+          const link = it.querySelector('link')?.textContent || '';
+          const descRaw = (it.querySelector('description')?.textContent || '').replace(/<[^>]+>/g,'');
+          const pubDate = it.querySelector('pubDate')?.textContent || '';
+          const source = it.querySelector('source')?.textContent || 'Google News';
+          
+          return {
+            title,
+            description: descRaw,
+            url: link,
+            publishedAt: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
+            source: { name: source },
+            content: generateDetailedArticleFromTitle(title, descRaw)
+          };
+        });
+
+        // Filter for weather/disaster content
+        articles = articles.filter(a => {
+          const t = (a.title + ' ' + a.description).toLowerCase();
+          return WEATHER_KEYWORDS.some(k => t.includes(k)) || 
+                 /alert|warning|evacuation|tsunami|earthquake|flood|storm|cyclone|hurricane|tornado|wildfire|landslide|emergency|disaster/i.test(t);
+        });
+
+        // Apply location filtering if terms are provided
+        if (terms && terms.length > 0) {
+          articles = filterByLocation(articles, terms);
+        }
+
+        return articles;
+      } catch (error) {
+        console.error('Google News RSS error:', error);
+        throw error;
+      }
+    }
+
+    // Fetch news from RSS feeds
+    async function fetchRSSNews(optionalQuery, terms) {
+      try {
+        const modeEl = document.getElementById('newsMode');
+        const queryEl = document.getElementById('newsQuery');
+        const mode = modeEl ? modeEl.value : 'auto';
+        const userQuery = (queryEl && queryEl.value.trim()) || '';
+
+        // RSS feeds for weather and disaster news
+        const rssFeeds = [
+          'https://www.weather.gov/rss.php',
+          'https://www.noaa.gov/rss/weather.xml',
+          'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.rss'
+        ];
+
+        let allArticles = [];
+
+        for (const feedUrl of rssFeeds) {
+          try {
+            // Use a CORS proxy to avoid cross-origin issues
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(feedUrl)}`;
+            const response = await fetch(proxyUrl);
+            
+            if (!response.ok) continue;
+            
+            const xmlText = await response.text();
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+            
+            const items = xmlDoc.querySelectorAll('item');
+            
+            items.forEach(item => {
+              const title = item.querySelector('title')?.textContent || '';
+              const description = item.querySelector('description')?.textContent || '';
+              const link = item.querySelector('link')?.textContent || '';
+              const pubDate = item.querySelector('pubDate')?.textContent || '';
+              
+              // Only include weather/disaster related articles
+              const text = (title + ' ' + description).toLowerCase();
+              if (WEATHER_KEYWORDS.some(keyword => text.includes(keyword)) ||
+                  /alert|warning|evacuation|emergency|disaster/i.test(text)) {
+                allArticles.push({
+                  title: title,
+                  description: description,
+                  url: link,
+                  publishedAt: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
+                  source: { name: 'Weather Service' },
+                  content: description,
+                  urlToImage: null
+                });
+              }
+            });
+          } catch (error) {
+            console.log(`RSS feed failed: ${feedUrl}`, error);
+            continue;
+          }
+        }
+
+        // Apply location filtering if terms are provided
+        if (terms && terms.length > 0) {
+          allArticles = filterByLocation(allArticles, terms);
+        }
+
+        // Sort by date and return top articles
+        allArticles.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+        return allArticles.slice(0, 10);
+      } catch (error) {
+        console.error('RSS news error:', error);
+        throw error;
+      }
+    }
+    
+    // Demo news fallback (updated with current events and location-aware content)
+    async function fetchDemoNews() {
+      const currentDate = new Date();
+      const formattedDate = currentDate.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      
+      // Get current location context for more relevant demo news
+      const modeEl = document.getElementById('newsMode');
+      const queryEl = document.getElementById('newsQuery');
+      const mode = modeEl ? modeEl.value : 'auto';
+      const userQuery = (queryEl && queryEl.value.trim()) || '';
+      
+      // Get location terms for filtering
+      const terms = buildScopeTerms();
+      
+      // Generate all possible demo news
+      const allDemoNews = [
+        {
+          title: `Severe Weather Alert: Winter Storm System Moving Across United States`,
+          description: `A powerful winter storm system is bringing heavy snow, ice, and dangerous travel conditions across the United States. Multiple regions have issued winter weather advisories.`,
+          content: generateDetailedArticle('winter-storm', 'Winter Storm', 'United States', formattedDate),
+          url: 'https://www.weather.gov/',
+          source: { name: 'National Weather Service' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        },
+        {
+          title: `Wildfire Update: Firefighters Battle Blazes in California`,
+          description: `Multiple wildfires continue to burn across California. Firefighters are working to contain the blazes as weather conditions remain challenging.`,
+          content: generateDetailedArticle('wildfire', 'Wildfire', 'California', formattedDate),
+          url: 'https://inciweb.nwcg.gov/',
+          source: { name: 'InciWeb' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        },
+        {
+          title: `Flood Warning: Heavy Rainfall Causes River Flooding in Texas`,
+          description: `Heavy rainfall over the past 48 hours has caused river levels to rise dramatically across Texas. Residents in low-lying areas are urged to take immediate action.`,
+          content: generateDetailedArticle('flood', 'Flood Warning', 'Texas', formattedDate),
+          url: 'https://water.weather.gov/',
+          source: { name: 'NOAA Water Prediction' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        },
+        {
+          title: `Heat Wave Alert: Extreme Temperatures Expected in Arizona`,
+          description: `A dangerous heat wave is expected to bring record-breaking temperatures across Arizona. Health officials are warning residents to take precautions.`,
+          content: generateDetailedArticle('heat-wave', 'Heat Wave', 'Arizona', formattedDate),
+          url: 'https://www.weather.gov/',
+          source: { name: 'National Weather Service' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        },
+        {
+          title: `Tornado Watch: Severe Thunderstorms Threaten Oklahoma`,
+          description: `The National Weather Service has issued tornado watches for multiple counties across Oklahoma. Residents should be prepared to take shelter if warnings are issued.`,
+          content: generateDetailedArticle('tornado', 'Tornado Watch', 'Oklahoma', formattedDate),
+          url: 'https://www.weather.gov/',
+          source: { name: 'National Weather Service' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        },
+        {
+          title: `Earthquake Alert: Seismic Activity Detected in California`,
+          description: `A magnitude 4.2 earthquake was detected in Southern California. No immediate damage reported, but aftershocks are possible.`,
+          content: generateDetailedArticle('earthquake', 'Earthquake Alert', 'California', formattedDate),
+          url: 'https://earthquake.usgs.gov/',
+          source: { name: 'USGS' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        },
+        {
+          title: `Tsunami Warning: Coastal Areas on Alert in Hawaii`,
+          description: `A tsunami warning has been issued for coastal areas of Hawaii following seismic activity in the Pacific Ocean.`,
+          content: generateDetailedArticle('tsunami', 'Tsunami Warning', 'Hawaii', formattedDate),
+          url: 'https://www.tsunami.gov/',
+          source: { name: 'NOAA Tsunami Warning Center' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        },
+        {
+          title: `Blizzard Warning: Severe Winter Storm Hits New York`,
+          description: `A severe blizzard is bringing heavy snow and strong winds to New York. Travel is strongly discouraged.`,
+          content: generateDetailedArticle('winter-storm', 'Blizzard Warning', 'New York', formattedDate),
+          url: 'https://www.weather.gov/',
+          source: { name: 'National Weather Service' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        },
+        {
+          title: `Monsoon Season Brings Heavy Rainfall to India`,
+          description: `The annual monsoon season has arrived in India, bringing heavy rainfall and flooding to several states.`,
+          content: generateDetailedArticle('flood', 'Monsoon Alert', 'India', formattedDate),
+          url: 'https://www.imd.gov.in/',
+          source: { name: 'India Meteorological Department' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        },
+        {
+          title: `Typhoon Warning: Tropical Storm Approaches Japan`,
+          description: `A powerful typhoon is approaching the coast of Japan, prompting evacuation orders in coastal areas.`,
+          content: generateDetailedArticle('storm', 'Typhoon Warning', 'Japan', formattedDate),
+          url: 'https://www.jma.go.jp/',
+          source: { name: 'Japan Meteorological Agency' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        },
+        {
+          title: `Heat Wave Alert: Record Temperatures in Australia`,
+          description: `Australia is experiencing record-breaking temperatures with heat wave conditions affecting multiple states.`,
+          content: generateDetailedArticle('heat-wave', 'Heat Wave Alert', 'Australia', formattedDate),
+          url: 'https://www.bom.gov.au/',
+          source: { name: 'Bureau of Meteorology' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        },
+        {
+          title: `Wildfire Emergency: Fires Rage Across Canada`,
+          description: `Multiple wildfires are burning across Canada, with thousands of hectares affected and evacuation orders in place.`,
+          content: generateDetailedArticle('wildfire', 'Wildfire Emergency', 'Canada', formattedDate),
+          url: 'https://www.canada.ca/',
+          source: { name: 'Canadian Forest Service' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        },
+        {
+          title: `Flood Warning: River Levels Rising in Germany`,
+          description: `Heavy rainfall has caused river levels to rise dramatically across Germany, with flood warnings in effect.`,
+          content: generateDetailedArticle('flood', 'Flood Warning', 'Germany', formattedDate),
+          url: 'https://www.dwd.de/',
+          source: { name: 'Deutscher Wetterdienst' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        },
+        {
+          title: `Mumbai Monsoon Alert: Heavy Rainfall Causes Traffic Chaos`,
+          description: `Heavy monsoon rainfall has caused severe traffic disruptions and flooding in Mumbai, India.`,
+          content: generateDetailedArticle('flood', 'Monsoon Alert', 'Mumbai', formattedDate),
+          url: 'https://www.imd.gov.in/',
+          source: { name: 'India Meteorological Department' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        },
+        {
+          title: `Tokyo Typhoon Warning: Evacuation Orders Issued`,
+          description: `A powerful typhoon is approaching Tokyo, Japan, with evacuation orders issued for coastal areas.`,
+          content: generateDetailedArticle('storm', 'Typhoon Warning', 'Tokyo', formattedDate),
+          url: 'https://www.jma.go.jp/',
+          source: { name: 'Japan Meteorological Agency' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        },
+        {
+          title: `London Heat Wave: Record Temperatures in UK Capital`,
+          description: `London is experiencing record-breaking temperatures with heat wave conditions affecting the city.`,
+          content: generateDetailedArticle('heat-wave', 'Heat Wave Alert', 'London', formattedDate),
+          url: 'https://www.metoffice.gov.uk/',
+          source: { name: 'Met Office' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        },
+        {
+          title: `Sydney Wildfire Alert: Bushfires Threaten City Outskirts`,
+          description: `Bushfires are threatening the outskirts of Sydney, Australia, with evacuation orders in place.`,
+          content: generateDetailedArticle('wildfire', 'Wildfire Alert', 'Sydney', formattedDate),
+          url: 'https://www.bom.gov.au/',
+          source: { name: 'Bureau of Meteorology' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        }
+      ];
+      
+      // Apply location filtering if terms are provided
+      if (terms && terms.length > 0) {
+        console.log('Filtering demo news with terms:', terms);
+        const filteredNews = filterByLocation(allDemoNews, terms);
+        console.log('Filtered news results:', filteredNews.length, 'articles');
+        return filteredNews.length > 0 ? filteredNews : allDemoNews.slice(0, 3); // Return filtered or first 3 if no matches
+      }
+      
+      // If no specific location, return location-specific news based on current place or user query
+      let locationContext = 'United States';
+      if (mode === 'auto' && currentPlace) {
+        locationContext = currentPlace.country || currentPlace.name || 'United States';
+      } else if (mode === 'country' || mode === 'city') {
+        locationContext = userQuery || 'United States';
+      }
+      
+      // Generate dynamic location-specific news based on current time and season
+      const currentHour = new Date().getHours();
+      const currentMonth = new Date().getMonth();
+      const isDaytime = currentHour >= 6 && currentHour <= 18;
+      const isSummer = currentMonth >= 5 && currentMonth <= 8;
+      const isWinter = currentMonth <= 2 || currentMonth === 11;
+      
+      // Select appropriate news based on time and season
+      let selectedNews = [];
+      
+      if (isWinter) {
+        selectedNews.push({
+          title: `Winter Storm Warning: Heavy Snow Expected in ${locationContext}`,
+          description: `A winter storm system is expected to bring heavy snowfall and dangerous travel conditions to ${locationContext}. Residents are advised to prepare for winter weather.`,
+          content: generateDetailedArticle('winter-storm', 'Winter Storm Warning', locationContext, formattedDate),
+          url: 'https://www.weather.gov/',
+          source: { name: 'National Weather Service' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        });
+      } else if (isSummer) {
+        selectedNews.push({
+          title: `Heat Wave Alert: Extreme Temperatures in ${locationContext}`,
+          description: `A dangerous heat wave is bringing record-breaking temperatures to ${locationContext}. Health officials are warning residents to take precautions.`,
+          content: generateDetailedArticle('heat-wave', 'Heat Wave Alert', locationContext, formattedDate),
+          url: 'https://www.weather.gov/',
+          source: { name: 'National Weather Service' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        });
+      } else {
+        selectedNews.push({
+          title: `Severe Weather Alert: Storm System Moving Through ${locationContext}`,
+          description: `A severe weather system is moving through ${locationContext}, bringing heavy rain, strong winds, and potential flooding.`,
+          content: generateDetailedArticle('storm', 'Severe Weather Alert', locationContext, formattedDate),
+          url: 'https://www.weather.gov/',
+          source: { name: 'National Weather Service' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        });
+      }
+      
+      // Add a second news item based on location characteristics
+      if (locationContext.toLowerCase().includes('india') || locationContext.toLowerCase().includes('mumbai')) {
+        selectedNews.push({
+          title: `Monsoon Update: Heavy Rainfall Continues in ${locationContext}`,
+          description: `The monsoon season continues to bring heavy rainfall to ${locationContext}, causing traffic disruptions and localized flooding.`,
+          content: generateDetailedArticle('flood', 'Monsoon Update', locationContext, formattedDate),
+          url: 'https://www.imd.gov.in/',
+          source: { name: 'India Meteorological Department' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        });
+      } else if (locationContext.toLowerCase().includes('japan') || locationContext.toLowerCase().includes('tokyo')) {
+        selectedNews.push({
+          title: `Typhoon Watch: Tropical Storm Approaching ${locationContext}`,
+          description: `A tropical storm is approaching ${locationContext}, with potential to develop into a typhoon. Residents are advised to monitor weather updates.`,
+          content: generateDetailedArticle('storm', 'Typhoon Watch', locationContext, formattedDate),
+          url: 'https://www.jma.go.jp/',
+          source: { name: 'Japan Meteorological Agency' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        });
+      } else {
+        selectedNews.push({
+          title: `Weather Update: Current Conditions in ${locationContext}`,
+          description: `Current weather conditions in ${locationContext} are being monitored. Stay informed about any developing weather patterns.`,
+          content: generateDetailedArticle('weather', 'Weather Update', locationContext, formattedDate),
+          url: 'https://www.weather.gov/',
+          source: { name: 'Weather Service' },
+          publishedAt: new Date().toISOString(),
+          urlToImage: null
+        });
+      }
+      
+      return selectedNews;
+    }
+    
+    // Generate detailed article content based on disaster type
+    function generateDetailedArticle(type, title, location, date) {
+      const articles = {
+        'winter-storm': `
+          <p>A powerful winter storm system is bringing hazardous weather conditions across the ${location}. The National Weather Service has issued winter weather advisories, winter storm warnings, and blizzard warnings for multiple states.</p>
+          
+          <h3>Current Conditions</h3>
+          <p>Heavy snow, freezing rain, and strong winds are creating dangerous travel conditions. Snowfall rates of 1-2 inches per hour are expected in some areas, with total accumulations of 6-12 inches possible.</p>
+          
+          <h3>Affected Areas</h3>
+          <ul>
+            <li><strong>States:</strong> Illinois, Indiana, Michigan, Wisconsin, Minnesota</li>
+            <li><strong>Major Cities:</strong> Chicago, Indianapolis, Detroit, Milwaukee, Minneapolis</li>
+            <li><strong>Duration:</strong> 24-36 hours expected</li>
+          </ul>
+          
+          <h3>Travel Hazards</h3>
+          <ul>
+            <li>Dangerous driving conditions on highways and local roads</li>
+            <li>Flight delays and cancellations at major airports</li>
+            <li>Public transportation disruptions</li>
+            <li>School and business closures likely</li>
+          </ul>
+          
+          <h3>Safety Recommendations</h3>
+          <ul>
+            <li>Avoid unnecessary travel during the storm</li>
+            <li>Keep emergency supplies in your vehicle</li>
+            <li>Dress in layers if you must go outside</li>
+            <li>Check on elderly neighbors and relatives</li>
+          </ul>
+          
+          <p><em>This winter storm warning will remain in effect until conditions improve.</em></p>
+        `,
+        'wildfire': `
+          <p>Multiple wildfires continue to burn across the ${location}, challenging firefighters as they work to protect communities and contain the blazes. Dry conditions and gusty winds are complicating firefighting efforts.</p>
+          
+          <h3>Active Fires</h3>
+          <ul>
+            <li><strong>California:</strong> 3 major fires burning in Northern and Central regions</li>
+            <li><strong>Oregon:</strong> 2 fires in the Cascade Mountains</li>
+            <li><strong>Washington:</strong> 1 fire in the Olympic Peninsula</li>
+          </ul>
+          
+          <h3>Current Status</h3>
+          <p>Firefighters have achieved 40-60% containment on most fires, but challenging weather conditions continue to pose threats. Air quality remains poor in affected regions.</p>
+          
+          <h3>Evacuation Orders</h3>
+          <p>Several communities remain under evacuation orders. Residents should monitor local emergency management websites and follow instructions from authorities.</p>
+          
+          <h3>Air Quality Impact</h3>
+          <p>Smoke from the fires has degraded air quality across multiple states. Residents in affected areas should limit outdoor activities and use air purifiers when possible.</p>
+          
+          <p><em>Fire conditions remain dynamic. Stay informed through official channels.</em></p>
+        `,
+        'flood': `
+          <p>Heavy rainfall has caused significant flooding across the ${location}, with multiple river systems exceeding flood stage. The National Weather Service has issued flood warnings for numerous counties.</p>
+          
+          <h3>Flood Conditions</h3>
+          <ul>
+            <li><strong>River Systems:</strong> Multiple rivers above flood stage</li>
+            <li><strong>Rainfall Totals:</strong> 4-8 inches in the past 48 hours</li>
+            <li><strong>Flood Duration:</strong> 24-48 hours expected</li>
+          </ul>
+          
+          <h3>Affected Communities</h3>
+          <p>Low-lying areas, particularly along rivers and streams, are experiencing flooding. Several roads and bridges have been closed due to high water.</p>
+          
+          <h3>Safety Measures</h3>
+          <ul>
+            <li>Never drive through flooded roadways</li>
+            <li>Move to higher ground if flooding threatens your home</li>
+            <li>Stay informed through local news and weather radio</li>
+            <li>Follow evacuation orders if issued</li>
+          </ul>
+          
+          <h3>Emergency Response</h3>
+          <p>Emergency response teams are actively monitoring the situation and providing assistance where needed. Sandbag distribution centers have been opened in affected areas.</p>
+          
+          <p><em>Flood waters can rise rapidly. Take immediate action if flooding threatens your safety.</em></p>
+        `,
+        'heat-wave': `
+          <p>A dangerous heat wave is bringing record-breaking temperatures across the ${location}. The National Weather Service has issued excessive heat warnings for multiple counties, with heat index values expected to reach dangerous levels.</p>
+          
+          <h3>Temperature Forecast</h3>
+          <ul>
+            <li><strong>High Temperatures:</strong> 100-110°F (38-43°C) expected</li>
+            <li><strong>Heat Index:</strong> 105-115°F (41-46°C) possible</li>
+            <li><strong>Duration:</strong> 5-7 days expected</li>
+            <li><strong>Overnight Lows:</strong> 75-85°F (24-29°C)</li>
+          </ul>
+          
+          <h3>Health Risks</h3>
+          <p>Extreme heat poses serious health risks, particularly for vulnerable populations including the elderly, young children, outdoor workers, and individuals with pre-existing medical conditions.</p>
+          
+          <h3>Safety Recommendations</h3>
+          <ul>
+            <li>Stay hydrated by drinking plenty of water</li>
+            <li>Limit outdoor activities during peak hours (10 AM - 4 PM)</li>
+            <li>Seek air-conditioned environments when possible</li>
+            <li>Check on elderly neighbors and relatives</li>
+            <li>Never leave children or pets in vehicles</li>
+          </ul>
+          
+          <h3>Cooling Centers</h3>
+          <p>Local governments have opened cooling centers throughout affected areas. These facilities provide air-conditioned spaces for residents who need relief from the heat.</p>
+          
+          <p><em>Take this heat wave seriously. Heat-related illnesses can develop rapidly and become life-threatening.</em></p>
+        `,
+        'tornado': `
+          <p>The National Weather Service has issued tornado watches for multiple counties across the ${location}. Severe thunderstorms capable of producing tornadoes are expected to develop throughout the afternoon and evening hours.</p>
+          
+          <h3>Current Threat</h3>
+          <ul>
+            <li><strong>Risk Level:</strong> Enhanced (Level 3 of 5)</li>
+            <li><strong>Timing:</strong> 2 PM - 10 PM local time</li>
+            <li><strong>Primary Threats:</strong> Tornadoes, large hail, damaging winds</li>
+          </ul>
+          
+          <h3>Affected Areas</h3>
+          <p>Counties across Kansas, Oklahoma, Missouri, and Arkansas are included in the tornado watch. Residents in these areas should be prepared to take immediate shelter if warnings are issued.</p>
+          
+          <h3>Safety Preparations</h3>
+          <ul>
+            <li>Identify your safe room or shelter location</li>
+            <li>Have emergency supplies ready</li>
+            <li>Monitor local weather broadcasts</li>
+            <li>Keep your phone charged and weather radio on</li>
+          </ul>
+          
+          <h3>If Warning is Issued</h3>
+          <ul>
+            <li>Move to your safe room immediately</li>
+            <li>Stay away from windows and exterior walls</li>
+            <li>Cover your head and neck for protection</li>
+            <li>Listen for emergency updates</li>
+          </ul>
+          
+          <p><em>Be prepared to take immediate action if tornado warnings are issued for your area.</em></p>
+        `
+      };
+      
+      return articles[type] || articles['winter-storm'];
+    }
+
+    // Generate detailed article content from title and description
+    function generateDetailedArticleFromTitle(title, description) {
+      const text = (title + ' ' + description).toLowerCase();
+      
+      // Determine disaster type from content
+      let disasterType = 'weather';
+      if (text.includes('storm') || text.includes('hurricane') || text.includes('tornado')) {
+        disasterType = 'storm';
+      } else if (text.includes('wildfire') || text.includes('fire')) {
+        disasterType = 'wildfire';
+      } else if (text.includes('flood') || text.includes('rain')) {
+        disasterType = 'flood';
+      } else if (text.includes('heat') || text.includes('temperature')) {
+        disasterType = 'heat-wave';
+      } else if (text.includes('winter') || text.includes('snow') || text.includes('ice')) {
+        disasterType = 'winter-storm';
+      } else if (text.includes('earthquake')) {
+        disasterType = 'earthquake';
+      } else if (text.includes('tsunami')) {
+        disasterType = 'tsunami';
+      }
+      
+      // Extract location from title/description
+      const locationMatch = text.match(/\b(in|across|throughout)\s+([^,]+)/i);
+      const location = locationMatch ? locationMatch[2] : 'the affected region';
+      
+      return generateDetailedArticle(disasterType, title, location, new Date().toLocaleDateString());
+    }
+
+    // Render news feed
+    async function renderNewsFeed() {
+      try {
+        const newsFeed = document.getElementById('newsFeed');
+        const loadingHtml = `
+          <div class="item" style="text-align: center; padding: 40px;">
+            <div class="spinner" style="width: 32px; height: 32px; margin: 0 auto 16px;"></div>
+            <div style="color: var(--muted);">Loading latest weather news...</div>
+          </div>
+        `;
+        
+        newsFeed.innerHTML = loadingHtml;
+        
+        // Debug: Log current news mode and location
+        const modeEl = document.getElementById('newsMode');
+        const queryEl = document.getElementById('newsQuery');
+        const mode = modeEl ? modeEl.value : 'auto';
+        const userQuery = (queryEl && queryEl.value.trim()) || '';
+        const terms = buildScopeTerms();
+        
+        console.log('News filtering debug:', {
+          mode,
+          userQuery,
+          currentPlace,
+          terms,
+          scopeLabel: document.getElementById('newsScopeLabel')?.textContent
+        });
+        
+        // Fetch news data
+        const articles = await fetchWeatherNews();
+        currentNews = articles;
+        
+        console.log('Fetched articles:', articles.length, 'articles');
+        
+        if (!articles || articles.length === 0) {
+          newsFeed.innerHTML = `
+            <div class="item" style="text-align: center; padding: 40px; color: var(--muted);">
+              No weather news available at the moment.
+            </div>
+          `;
+          return;
+        }
+        
+        // Generate news items HTML
+        const newsItemsHtml = articles.map((article, index) => {
+          const publishedDate = new Date(article.publishedAt);
+          const timeAgo = getTimeAgo(publishedDate);
+          const title = article.title || '';
+          const desc = article.description || '';
+          const tags = extractTags(title, desc);
+          const source = (article.source && article.source.name) ? article.source.name : 'Source';
+          const dateStr = publishedDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+          
+          return `
+            <div class="item news-item" data-news-index="${index}">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #38bdf8, #0ea5e9); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 18px;">
+                  ${getWeatherIcon(title, desc)}
+                </div>
+                <div style="flex: 1;">
+                  <div style="font-weight: 600; margin-bottom: 4px;">${title}</div>
+                  <div style="color: var(--muted); font-size: 13px; margin-bottom: 8px;">${desc}</div>
+                  <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                    ${tags.map(tag => `<span class=\"tag\" style=\"border-color: #38bdf8; color: #38bdf8;\">${tag}</span>`).join('')}
+                    <span style=\"color: var(--muted); font-size: 12px;\">${source} • ${dateStr} • ${timeAgo}</span>
+                    ${article.url ? `<a href=\"${article.url}\" target=\"_blank\" rel=\"noopener\" class=\"pill\" style=\"margin-left:auto\" onclick=\"event.stopPropagation();\">Read source</a>` : ''}
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+        
+        // Add controls + refresh button footer
+        const refreshButtonHtml = `
+          <div class="item" style="text-align: center; padding: 20px;">
+            <button id="refreshNews" style="background: linear-gradient(135deg, #38bdf8, #0ea5e9); border: none; color: white; padding: 12px 24px; border-radius: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 8px; margin: 0 auto;">
+              <span id="refreshIcon">🔄</span>
+              <span>Refresh News Feed</span>
+            </button>
+            <div style="color: var(--muted); font-size: 12px; margin-top: 8px;">
+              Last updated: ${new Date().toLocaleTimeString()} • Auto-refresh every 30 minutes
+            </div>
+          </div>
+        `;
+        
+        newsFeed.innerHTML = newsItemsHtml + refreshButtonHtml;
+        
+              // Re-attach event listeners
+      attachNewsEventListeners();
+      updateNewsScopeLabel();
+      
+      // Show success message
+      showToast(`News feed updated with ${articles.length} weather alerts!`, 'success');
+        
+      } catch (error) {
+        console.error('Error rendering news feed:', error);
+        document.getElementById('newsFeed').innerHTML = `
+          <div class="item" style="text-align: center; padding: 40px; color: var(--muted);">
+            Failed to load news. Please try again later.
+          </div>
+        `;
+      }
+    }
+    
+    // Helper functions
+    function getTimeAgo(date) {
+      const now = new Date();
+      const diffInSeconds = Math.floor((now - date) / 1000);
+      
+      if (diffInSeconds < 60) return 'Just now';
+      if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+      if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+      if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)}d ago`;
+      
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+    
+    function extractTags(title, description) {
+      const text = (title + ' ' + description).toLowerCase();
+      const tagKeywords = {
+        'Storm': ['storm', 'hurricane', 'tornado', 'thunderstorm'],
+        'Flood': ['flood', 'rain', 'rainfall', 'water'],
+        'Wildfire': ['wildfire', 'fire', 'blaze', 'burning'],
+        'Heat': ['heat', 'temperature', 'hot', 'wave'],
+        'Winter': ['winter', 'snow', 'ice', 'blizzard'],
+        'Emergency': ['emergency', 'warning', 'alert', 'evacuation']
+      };
+      
+      const foundTags = [];
+      for (const [tag, keywords] of Object.entries(tagKeywords)) {
+        if (keywords.some(keyword => text.includes(keyword))) {
+          foundTags.push(tag);
+        }
+      }
+      
+      return foundTags.slice(0, 3); // Return max 3 tags
+    }
+    
+    function getWeatherIcon(title, description) {
+      const text = (title + ' ' + description).toLowerCase();
+      
+      if (text.includes('storm') || text.includes('hurricane') || text.includes('tornado')) return '🌪️';
+      if (text.includes('wildfire') || text.includes('fire')) return '🔥';
+      if (text.includes('flood') || text.includes('rain')) return '🌊';
+      if (text.includes('heat') || text.includes('temperature')) return '🌡️';
+      if (text.includes('winter') || text.includes('snow') || text.includes('ice')) return '❄️';
+      if (text.includes('earthquake')) return '🌋';
+      if (text.includes('tsunami')) return '🌊';
+      
+      return '🌤️'; // Default weather icon
+    }
+
+    // Build scope/location terms array (quoted for exact matching)
+    function buildScopeTerms(){
+      const modeEl = document.getElementById('newsMode');
+      const queryEl = document.getElementById('newsQuery');
+      const mode = modeEl ? modeEl.value : 'auto';
+      const userQuery = (queryEl && queryEl.value.trim()) || '';
+      const terms = [];
+      
+      if (mode === 'auto'){
+        if (currentPlace && currentPlace.name) {
+          terms.push(currentPlace.name);
+          // Also add common variations
+          if (currentPlace.name.includes(' ')) {
+            terms.push(currentPlace.name.split(' ')[0]); // First word
+          }
+        }
+        if (currentPlace && currentPlace.country) {
+          terms.push(currentPlace.country);
+          // Add common country variations
+          const countryVariations = {
+            'United States': ['US', 'USA', 'America'],
+            'United Kingdom': ['UK', 'Britain', 'England'],
+            'India': ['Bharat'],
+            'Australia': ['Aussie'],
+            'Canada': ['Canadian'],
+            'Germany': ['Deutschland'],
+            'France': ['French'],
+            'Spain': ['Spanish'],
+            'Italy': ['Italian'],
+            'Japan': ['Japanese'],
+            'China': ['Chinese'],
+            'Brazil': ['Brazilian'],
+            'Mexico': ['Mexican'],
+            'Russia': ['Russian']
+          };
+          if (countryVariations[currentPlace.country]) {
+            terms.push(...countryVariations[currentPlace.country]);
+          }
+        }
+      } else if (mode === 'country' || mode === 'city'){
+        if (userQuery) {
+          terms.push(userQuery);
+          // Add common variations for the user query
+          if (userQuery.includes(' ')) {
+            terms.push(userQuery.split(' ')[0]); // First word
+          }
+        }
+      }
+      
+      // Remove duplicates and filter out empty strings
+      return [...new Set(terms.filter(Boolean))];
+    }
+
+    // Filter articles by requiring at least one location term match
+    function filterByLocation(articles, terms){
+      if (!terms || !terms.length) return articles;
+      
+      console.log('Filtering articles with terms:', terms);
+      
+      // Create flexible patterns that match location terms
+      const patterns = terms.map(t => {
+        const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // More flexible pattern that matches the term anywhere in the text
+        return new RegExp(escaped, 'i');
+      });
+      
+      console.log('Created patterns:', patterns.map(p => p.source));
+      
+      const filtered = articles.filter(a => {
+        const txt = ((a.title || '') + ' ' + (a.description || '')).toLowerCase();
+        const matches = patterns.some(rx => rx.test(txt));
+        if (matches) {
+          console.log('Article matched:', a.title);
+        }
+        return matches;
+      });
+      
+      console.log('Filtered results:', filtered.length, 'out of', articles.length);
+      
+      // If no location-specific results, return original articles
+      return filtered.length > 0 ? filtered : articles;
+    }
+    
+    // Attach event listeners to news items and controls
+    function attachNewsEventListeners() {
+      // Remove existing event listeners to prevent duplicates
+      const existingRefreshBtn = document.getElementById('refreshNews');
+      if (existingRefreshBtn) {
+        const newRefreshBtn = existingRefreshBtn.cloneNode(true);
+        existingRefreshBtn.parentNode.replaceChild(newRefreshBtn, existingRefreshBtn);
+      }
+
+      const newsItems = document.querySelectorAll('.news-item');
+      
+      newsItems.forEach(item => {
+        // Remove existing click listeners
+        const newItem = item.cloneNode(true);
+        item.parentNode.replaceChild(newItem, item);
+        
+        newItem.addEventListener('click', () => {
+          const newsIndex = parseInt(newItem.dataset.newsIndex);
+          const article = currentNews[newsIndex];
+          
+          if (article) {
+            // Open modal with article data
+            openNewsModal(article);
+          }
+        });
+      });
+      
+      // Re-attach refresh button listener
+      const refreshBtn = document.getElementById('refreshNews');
+      if (refreshBtn) {
+        refreshBtn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log('Refresh button clicked');
+          
+          // Show loading state
+          const refreshIcon = document.getElementById('refreshIcon');
+          if (refreshIcon) {
+            refreshIcon.style.animation = 'spin 1s linear infinite';
+          }
+          refreshBtn.disabled = true;
+          refreshBtn.style.opacity = '0.7';
+          
+          showToast('Refreshing news feed...', 'info');
+          
+          try {
+            await renderNewsFeed();
+            showToast('News feed updated successfully!', 'success');
+          } catch (error) {
+            console.error('Error refreshing news:', error);
+            showToast('Failed to refresh news feed', 'error');
+          } finally {
+            // Reset button state
+            if (refreshIcon) {
+              refreshIcon.style.animation = '';
+            }
+            refreshBtn.disabled = false;
+            refreshBtn.style.opacity = '1';
+          }
+        });
+      }
+
+      const modeEl = document.getElementById('newsMode');
+      const queryEl = document.getElementById('newsQuery');
+      const applyBtn = document.getElementById('applyNewsFilter');
+      
+      if (modeEl && queryEl){
+        // Remove existing listeners
+        const newModeEl = modeEl.cloneNode(true);
+        modeEl.parentNode.replaceChild(newModeEl, modeEl);
+        
+        newModeEl.addEventListener('change', ()=>{
+          const showInput = newModeEl.value === 'country' || newModeEl.value === 'city';
+          queryEl.style.display = showInput ? 'block' : 'none';
+          updateNewsScopeLabel();
+        });
+      }
+      
+      if (applyBtn){
+        // Remove existing listeners
+        const newApplyBtn = applyBtn.cloneNode(true);
+        applyBtn.parentNode.replaceChild(newApplyBtn, applyBtn);
+        
+        newApplyBtn.addEventListener('click', (e)=>{
+          e.preventDefault();
+          e.stopPropagation();
+          
+          // Validate input
+          const modeVal = (modeEl && modeEl.value) || 'auto';
+          const qVal = (queryEl && queryEl.value.trim()) || '';
+          
+          if ((modeVal === 'country' || modeVal === 'city') && !qVal) {
+            showToast('Please enter a country or city name.', 'warning');
+            return;
+          }
+          
+          // Persist user choice
+          localStorage.setItem('newsMode', modeVal);
+          localStorage.setItem('newsQuery', qVal);
+          
+          // Show loading state
+          showToast('Updating news feed...', 'info');
+          
+          renderNewsFeed();
+        });
+      }
+
+      // Add quick refresh button listener
+      const quickRefreshBtn = document.getElementById('quickRefreshNews');
+      if (quickRefreshBtn) {
+        // Remove existing listeners
+        const newQuickRefreshBtn = quickRefreshBtn.cloneNode(true);
+        quickRefreshBtn.parentNode.replaceChild(newQuickRefreshBtn, quickRefreshBtn);
+        
+        newQuickRefreshBtn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          // Show loading state
+          newQuickRefreshBtn.disabled = true;
+          newQuickRefreshBtn.textContent = '⏳ Refreshing...';
+          
+          showToast('Refreshing news feed...', 'info');
+          
+          try {
+            await renderNewsFeed();
+            showToast('News feed updated successfully!', 'success');
+          } catch (error) {
+            console.error('Error refreshing news:', error);
+            showToast('Failed to refresh news feed', 'error');
+          } finally {
+            // Reset button state
+            newQuickRefreshBtn.disabled = false;
+            newQuickRefreshBtn.innerHTML = '🔄 Refresh';
+          }
+        });
+      }
+    }
+
+    function updateNewsScopeLabel(){
+      const label = document.getElementById('newsScopeLabel');
+      const modeEl = document.getElementById('newsMode');
+      const queryEl = document.getElementById('newsQuery');
+      if (!label || !modeEl) return;
+      const mode = modeEl.value;
+      if (mode === 'global') { 
+        label.textContent = 'Scope: Global'; 
+        return; 
+      }
+      if (mode === 'country' || mode === 'city') {
+        const query = (queryEl && queryEl.value.trim()) || '';
+        label.textContent = query ? `Scope: ${query}` : 'Scope: —';
+        return;
+      }
+      // auto mode
+      if (currentPlace){
+        const placeName = currentPlace.name || '';
+        const countryName = currentPlace.country || '';
+        const scopeText = placeName && countryName ? `${placeName}, ${countryName}` : (placeName || countryName || 'Auto');
+        label.textContent = `Scope: ${scopeText}`;
+      } else {
+        label.textContent = 'Scope: Auto';
+      }
+    }
+    
+    // Open news modal with article data
+    function openNewsModal(article) {
+      const publishedDate = new Date(article.publishedAt);
+      const formattedDate = publishedDate.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      
+      const tags = extractTags(article.title, article.description);
+      
+      document.getElementById('modalTitle').textContent = article.title;
+      document.getElementById('modalMeta').textContent = `${article.source.name} • ${formattedDate}`;
+      document.getElementById('modalBody').innerHTML = article.content || article.description;
+      
+      // Render tags
+      const tagsContainer = document.getElementById('modalTags');
+      tagsContainer.innerHTML = tags.map(tag => 
+        `<span class="news-modal-tag">${tag}</span>`
+      ).join('');
+      
+      // Render source information
+      const sourceContainer = document.getElementById('modalSource');
+      if (article.url) {
+        sourceContainer.innerHTML = `
+          <div class="source-info">Source: ${article.source.name}</div>
+          <a href="${article.url}" target="_blank" rel="noopener noreferrer">
+            🔗 Read Full Article
+          </a>
+        `;
+      } else {
+        sourceContainer.innerHTML = '';
+      }
+      
+      // Show modal with animation
+      newsModal.style.display = 'block';
+      setTimeout(() => {
+        newsModal.classList.add('show');
+      }, 10);
+    }
+
+    // Close modal
+    closeNewsModal.addEventListener('click', () => {
+      newsModal.classList.remove('show');
+      setTimeout(() => {
+        newsModal.style.display = 'none';
+      }, 300);
+    });
+
+    // Close modal when clicking outside
+    newsModal.addEventListener('click', (e) => {
+      if (e.target === newsModal) {
+        closeNewsModal.click();
+      }
+    });
+
+    // Close modal with Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && newsModal.style.display === 'block') {
+        closeNewsModal.click();
+      }
+      
+      // Keyboard shortcuts for news refresh
+      if ((e.ctrlKey && e.key === 'r') || e.key === 'F5') {
+        e.preventDefault();
+        const quickRefreshBtn = document.getElementById('quickRefreshNews');
+        if (quickRefreshBtn && !quickRefreshBtn.disabled) {
+          quickRefreshBtn.click();
+        }
+      }
+    });
+  </script>
 </body>
 </html>
-
